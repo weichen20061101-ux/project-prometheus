@@ -578,6 +578,12 @@ function ReviewBadge(props) {
     <div className={"mt-4 rounded-md border p-3 text-sm leading-6 " + palette}>
       <p className="font-bold">{result.label}</p>
       <p className="mt-1">{result.message}</p>
+      {result.missingConcepts?.length ? (
+        <p className="mt-2">
+          需要補強：{result.missingConcepts.join("、")}
+        </p>
+      ) : null}
+      {result.followUpQuestion ? <p className="mt-2 font-bold">追問：{result.followUpQuestion}</p> : null}
       <p className="mt-2 font-bold">本次獲得：{result.awardedExp} EXP</p>
     </div>
   );
@@ -798,8 +804,22 @@ function evaluateAnswer(answer, quest) {
   const plain = answer.replace(/\s+/g, " ").trim();
   const sentenceCount = plain.split(/[。！？!?]/).filter(Boolean).length;
   const minFailLength = Math.max(45, quest.questions.length * 18);
-  const reinforceLength = Math.max(90, quest.questions.length * 35);
   const passLength = Math.max(150, quest.questions.length * 48);
+  const rubricChecks = Array.isArray(quest.rubric) ? quest.rubric : [];
+  const matchedConcepts = rubricChecks.filter(function (item) {
+    return item.keywords.some(function (keyword) {
+      return plain.toLowerCase().includes(keyword.toLowerCase());
+    });
+  });
+  const missingConcepts = rubricChecks
+    .filter(function (item) {
+      return !matchedConcepts.includes(item);
+    })
+    .map(function (item) {
+      return item.concept;
+    });
+  const coverageRate = rubricChecks.length ? matchedConcepts.length / rubricChecks.length : 1;
+  const followUpQuestion = missingConcepts.length ? "請補充：" + missingConcepts[0] + "，並說明你的理由。" : "";
 
   if (plain.length < minFailLength || sentenceCount < Math.max(2, quest.questions.length - 1)) {
     return {
@@ -807,19 +827,26 @@ function evaluateAnswer(answer, quest) {
       label: "未達標",
       awardedExp: 0,
       message: "回答太短或不夠完整。請至少逐題作答，用自己的話把邏輯講清楚。",
+      missingConcepts,
+      followUpQuestion,
     };
   }
 
-  if (plain.length < passLength) {
+  if (plain.length < passLength || coverageRate < 0.75) {
     return {
       status: "reinforce",
       label: "通過但需補強",
       awardedExp: Math.round(quest.exp * 0.7),
-      message: "核心方向對了，但推理還不夠扎實。請再補一句為什麼，讓答案更像你自己的理解。",
+      message:
+        coverageRate < 0.75
+          ? "你有抓到部分方向，但還漏掉幾個核心概念。先把缺的點補齊，再讓答案更完整。"
+          : "核心方向對了，但推理還不夠扎實。請再補一句為什麼，讓答案更像你自己的理解。",
       reviewAfterPass:
         quest.type === "daily_gate"
           ? "分析師首題已通過，但還需要補強。其他主題已先解鎖，建議今天再回來把這題講得更完整。"
           : "這題已通過，但表達還可以更精準。進度已記錄，你可以先繼續下一題。",
+      missingConcepts,
+      followUpQuestion,
     };
   }
 
@@ -832,6 +859,8 @@ function evaluateAnswer(answer, quest) {
       quest.type === "daily_gate"
         ? "分析師首題已通過，其他主題任務已解鎖。接下來可以從英文、交易系統或個人成長裡挑一題繼續。"
         : "任務已通過驗收，EXP 已發放。你可以繼續今天的其他已解鎖任務。",
+    missingConcepts,
+    followUpQuestion,
   };
 }
 
