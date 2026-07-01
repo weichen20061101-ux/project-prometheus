@@ -1,0 +1,88 @@
+[
+  {
+    "id": "english-annual-report-001",
+    "topic": "english",
+    "skill": "financial-english",
+    "type": "standard",
+    "title": "閱讀台積電年報前兩頁",
+    "track": "英文 / 財經英文",
+    "minLevel": 0,
+    "maxLevel": 1,
+    "seconds": 600,
+    "exp": 30,
+    "materialTitle": "學習資料：讀年報前兩頁的方法",
+    "materials": [
+      "先看董事長或 CEO 的信，找出公司最重視的三個詞。",
+      "不用逐字翻譯，先抓主題：成長、風險、技術、客戶、資本支出。",
+      "重複出現的字通常就是管理層最想傳達的方向。"
+    ],
+    "questions": [
+      "董事長最重視什麼？",
+      "你看到哪一個關鍵字最常出現？"
+    ],
+    "clear": "寫下兩句觀察，不需要查資料。",
+    "hints": [
+      "先找反覆出現的關鍵字。",
+      "不需要完整翻譯，只要抓出主軸。",
+      "用自己的中文重述看到的重點。"
+    ]
+  },
+  {
+    "id": "english-earnings-call-002",
+    "topic": "english",
+    "skill": "reading",
+    "type": "standard",
+    "title": "拆解法說會開場白",
+    "track": "英文 / 閱讀",
+    "minLevel": 1,
+    "maxLevel": 3,
+    "seconds": 720,
+    "exp": 40,
+    "materialTitle": "學習資料：法說會開場白常見結構",
+    "materials": [
+      "管理層開場通常先談季度表現，再談策略、展望與風險。",
+      "關鍵動詞像 improve、maintain、expect、navigate，常用來表達態度與方向。",
+      "分析時先看語氣，再看數字。"
+    ],
+    "questions": [
+      "管理層的語氣偏保守還是偏樂觀？",
+      "哪一個動詞最能代表管理層的態度？",
+      "你會怎麼用一句中文總結這段開場？"
+    ],
+    "clear": "請用三句短答完成。",
+    "hints": [
+      "語氣不是看形容詞，而是看管理層承諾程度。",
+      "expect 和 maintain 的語感不同。",
+      "總結先求準確，不求漂亮。"
+    ]
+  },
+  {
+    "id": "english-risk-section-003",
+    "topic": "english",
+    "skill": "vocabulary",
+    "type": "standard",
+    "title": "風險段落關鍵字掃描",
+    "track": "英文 / 字彙",
+    "minLevel": 3,
+    "maxLevel": 99,
+    "seconds": 900,
+    "exp": 55,
+    "materialTitle": "學習資料：年報風險段落怎麼抓重點",
+    "materials": [
+      "風險段落常出現 uncertainty、volatility、litigation、regulation、exposure 等字。",
+      "先分辨是市場風險、法規風險、營運風險還是客戶集中風險。",
+      "重要的不是會唸，而是知道這些字在投資判讀中代表什麼。"
+    ],
+    "questions": [
+      "哪兩個單字最值得先記下來？",
+      "這段風險偏向哪一類？",
+      "如果你是投資人，哪一句會讓你停下來重看？"
+    ],
+    "clear": "完成三題，並至少引用一個英文單字。",
+    "hints": [
+      "先分辨風險類型，再挑字。",
+      "不需要整段翻譯，先抓出最有威脅的句子。",
+      "把英文單字和投資意義連起來。"
+    ]
+  }
+]
