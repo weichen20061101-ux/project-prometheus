@@ -1,0 +1,549 @@
+const LEVEL_COUNT = 10;
+const STANDARD_QUESTS_PER_LEVEL = 10;
+const DAILY_ENGLISH_QUESTS_PER_LEVEL = 20;
+
+const BUILTIN_TOPICS = [
+  {
+    id: "analyst",
+    title: "分析師之路",
+    goal: "三年後具備獨立研究公司的能力",
+    skills: ["經濟學", "財報分析", "公司分析", "產業分析", "總經", "投資學"],
+    primarySkill: "財報分析",
+    baseMaxExp: 300,
+    expStep: 60,
+    accent: "cyan",
+    bossTitle: "財報解讀壓力測試",
+    bossQuestions: ["公司真正賺的是什麼？", "利潤是否可持續？", "風險來自哪裡？", "你的結論是什麼？"],
+    projectTitle: "產業研究備忘錄",
+    projectSteps: ["核心指標", "競爭優勢", "成長動能", "風險摘要", "投資結論"],
+  },
+  {
+    id: "english",
+    title: "英文",
+    goal: "能閱讀英文年報與法說會",
+    skills: ["財經英文", "閱讀", "寫作", "字彙"],
+    primarySkill: "財經英文",
+    baseMaxExp: 120,
+    expStep: 40,
+    accent: "violet",
+    bossTitle: "英文材料理解測試",
+    bossQuestions: ["管理層語氣是什麼？", "最重要關鍵字是什麼？", "哪一句最值得重看？", "你會怎麼中文總結？"],
+    projectTitle: "英語閱讀檔案",
+    projectSteps: ["摘要句", "關鍵字", "風險詞", "語氣判讀", "中文重述"],
+  },
+  {
+    id: "dailyEnglish",
+    title: "日常英語",
+    goal: "把英文變成每天會開口與會寫的技能",
+    skills: ["口說", "生活情境", "句型", "聽讀反應"],
+    primarySkill: "口說表達",
+    baseMaxExp: 100,
+    expStep: 35,
+    accent: "emerald",
+    bossTitle: "情境英語通關",
+    bossQuestions: ["這個情境你會怎麼開口？", "你會用哪個句型？", "哪個字是重點？", "你能自然地重說一次嗎？"],
+    projectTitle: "生活英語口袋本",
+    projectSteps: ["情境句", "常用詞", "替換說法", "短對話", "每日複誦"],
+  },
+  {
+    id: "trading",
+    title: "交易系統",
+    goal: "建立自己的交易框架",
+    skills: ["技術分析", "風控", "回測", "紀律"],
+    primarySkill: "風控紀律",
+    baseMaxExp: 120,
+    expStep: 40,
+    accent: "amber",
+    bossTitle: "交易紀律壓力測試",
+    bossQuestions: ["這筆交易的風險在哪？", "規則是否可重複？", "哪一步最容易失控？", "你會怎麼避免再犯？"],
+    projectTitle: "交易系統草案",
+    projectSteps: ["進場規則", "出場規則", "風險限制", "回測摘要", "紀律檢查"],
+  },
+  {
+    id: "growth",
+    title: "個人成長",
+    goal: "建立穩定執行系統",
+    skills: ["專注", "時間管理", "深度工作", "習慣建立"],
+    primarySkill: "深度工作",
+    baseMaxExp: 150,
+    expStep: 50,
+    accent: "rose",
+    bossTitle: "執行力驗收",
+    bossQuestions: ["阻力來自哪裡？", "你真的排進日程了嗎？", "最小可執行版本是什麼？", "你會怎麼持續？"],
+    projectTitle: "個人系統升級卡",
+    projectSteps: ["環境設定", "時間區塊", "最小習慣", "每週回顧", "修正策略"],
+  },
+];
+
+export const DEFAULT_SETTINGS = {
+  dailyLoad: "focused",
+  reviewMode: "hybrid",
+  timerMode: "focus",
+  hintMode: "guided",
+};
+
+export const SETTINGS_OPTIONS = {
+  dailyLoad: [
+    { id: "focused", label: "單題推進", description: "每個主題每日 1 題，壓力最低。" },
+    { id: "balanced", label: "平衡練習", description: "每個主題每日 2 題，進度更穩。" },
+    { id: "intensive", label: "加壓模式", description: "每個主題每日 3 題，節奏最快。" },
+  ],
+  reviewMode: [
+    { id: "coaching", label: "教練導向", description: "較重視鼓勵與補答建議。" },
+    { id: "hybrid", label: "混合驗收", description: "規則判定與教練回饋並重。" },
+    { id: "strict", label: "嚴格驗收", description: "需要更高覆蓋率與更完整回答。" },
+  ],
+  timerMode: [
+    { id: "focus", label: "專注倒數", description: "使用原始倒數時間。" },
+    { id: "relaxed", label: "寬鬆倒數", description: "時間延長 50%。" },
+    { id: "off", label: "不計時", description: "保留流程，但不啟動倒數。" },
+  ],
+  hintMode: [
+    { id: "sparse", label: "少提示", description: "一次只給一條提示。" },
+    { id: "guided", label: "逐步引導", description: "按一次多推進一步。" },
+    { id: "coach", label: "教練模式", description: "優先顯示補答方向與示意。" },
+  ],
+};
+
+const DAILY_ENGLISH_SCENARIOS = [
+  "打招呼", "自我介紹", "安排今天行程", "描述早餐", "點飲料", "買東西", "問路",
+  "搭車", "報到", "打電話", "傳訊息", "邀約", "拒絕", "表達喜歡", "描述心情",
+  "看醫生", "工作請求", "學習計畫", "旅行應對", "睡前回顧",
+];
+
+const ANALYST_LEVELS = [
+  levelSpec("分析師 Lv0 基礎會計", "財報分析", "先建立會計三表與資金來源的直覺。", [
+    "資產定義", "負債定義", "股東權益", "借款變化", "應收帳款", "存貨意義", "折舊直覺", "現金用途", "設備資產", "資金來源",
+  ]),
+  levelSpec("分析師 Lv1 損益表", "財報分析", "理解公司賺錢是如何一層一層形成。", [
+    "營收來源", "銷貨成本", "毛利率", "營業費用", "營業利益", "稅後淨利", "業外項目", "費用侵蝕", "營收成長", "獲利品質",
+  ]),
+  levelSpec("分析師 Lv2 現金流", "財報分析", "把獲利和現金拆開來看。", [
+    "營運現金流", "投資現金流", "籌資現金流", "資本支出", "折舊回加", "應收帳款增加", "存貨堆積", "自由現金流", "現金缺口", "現金流品質",
+  ]),
+  levelSpec("分析師 Lv3 效率指標", "公司分析", "開始用指標比較公司效率。", [
+    "ROE", "ROA", "毛利率對比", "營益率", "淨利率", "資產週轉", "存貨週轉", "應收帳款週轉", "槓桿影響", "杜邦拆解",
+  ]),
+  levelSpec("分析師 Lv4 資本結構", "公司分析", "理解公司怎麼借錢、還錢、擴張。", [
+    "負債比", "流動比率", "速動比率", "利息保障倍數", "短債壓力", "長債結構", "現金水位", "增資影響", "回購意義", "股利政策",
+  ]),
+  levelSpec("分析師 Lv5 公司分析", "公司分析", "從商業模式與競爭力看公司。", [
+    "商業模式", "護城河", "定價權", "客戶集中", "供應商依賴", "產品組合", "管理層品質", "擴產邏輯", "市占率", "競爭優勢",
+  ]),
+  levelSpec("分析師 Lv6 產業分析", "產業分析", "把公司放回產業位置中理解。", [
+    "產業鏈位置", "上游議價", "下游需求", "景氣循環", "進入門檻", "替代風險", "供需失衡", "庫存週期", "技術路線", "市場結構",
+  ]),
+  levelSpec("分析師 Lv7 總經框架", "總經", "把公司結果連回利率、景氣與政策。", [
+    "升息影響", "降息影響", "匯率波動", "通膨壓力", "景氣循環", "出口需求", "資本支出週期", "政策補貼", "失業與消費", "領先指標",
+  ]),
+  levelSpec("分析師 Lv8 投資判讀", "投資學", "把財報與產業資訊轉成投資觀點。", [
+    "估值邏輯", "成長 vs 價值", "安全邊際", "市場預期", "利多兌現", "風險報酬比", "催化劑", "下修風險", "多空論點", "投資結論",
+  ]),
+  levelSpec("分析師 Lv9 綜合驗收", "投資學", "綜合公司、產業、總經與估值做完整判讀。", [
+    "季度總結", "關鍵數字排序", "管理層訊號", "風險摘要", "下一季觀察", "市場誤判", "研究筆記", "投資假設", "反方論點", "最終判斷",
+  ]),
+];
+
+const ENGLISH_LEVELS = [
+  levelSpec("英文 Lv0 關鍵字抓取", "財經英文", "先看懂材料中的主軸與高頻字。", [
+    "董事長信主軸", "高頻關鍵字", "一句中文摘要", "公司語氣", "展望字眼", "風險字眼", "客戶描述", "技術描述", "資本支出字眼", "成長敘事",
+  ]),
+  levelSpec("英文 Lv1 年報閱讀", "閱讀", "從段落中抓出管理層最想說的重點。", [
+    "開場白總結", "段落主題句", "管理層重點", "重複概念", "正面措辭", "保守措辭", "未來展望", "目標客戶", "營運挑戰", "關鍵引用句",
+  ]),
+  levelSpec("英文 Lv2 法說會", "閱讀", "訓練法說會口語資訊的拆解能力。", [
+    "開場語氣", "營收敘述", "成本壓力", "需求變化", "產能利用", "展望句型", "expect 用法", "maintain 用法", "navigate 用法", "一句總結",
+  ]),
+  levelSpec("英文 Lv3 風險段落", "字彙", "把風險字眼和投資判讀連起來。", [
+    "uncertainty", "volatility", "regulation", "litigation", "exposure", "customer concentration", "inventory risk", "margin pressure", "currency impact", "guidance cut",
+  ]),
+  levelSpec("英文 Lv4 財報用語", "字彙", "熟悉常見財務敘述。", [
+    "gross margin", "operating income", "free cash flow", "capital expenditure", "inventory turnover", "accounts receivable", "working capital", "share repurchase", "dividend policy", "guidance",
+  ]),
+  levelSpec("英文 Lv5 重述能力", "寫作", "把英文材料轉成自己的中文。", [
+    "一句重述", "兩句摘要", "管理層觀點", "風險重點", "利多摘要", "利空摘要", "數字重點", "情緒判讀", "對投資人的意義", "反方提醒",
+  ]),
+  levelSpec("英文 Lv6 問答判讀", "閱讀", "拆解法說 Q&A 的真實訊號。", [
+    "分析師提問", "管理層避重就輕", "重點回應", "模糊措辭", "承諾程度", "風險承認", "需求不確定", "訂單能見度", "庫存問題", "競爭回答",
+  ]),
+  levelSpec("英文 Lv7 專有字彙", "字彙", "逐步掌握投資圈高頻專有詞。", [
+    "headwind", "tailwind", "normalized", "one-off", "resilient", "secular growth", "cyclical weakness", "pricing power", "utilization", "visibility",
+  ]),
+  levelSpec("英文 Lv8 輸出表達", "寫作", "開始用簡單英文輸出理解。", [
+    "一句英文摘要", "兩句英文重述", "英文風險提示", "英文管理層語氣", "英文需求判讀", "英文成本敘述", "英文投資觀察", "英文市場預期", "英文結論", "英文追問",
+  ]),
+  levelSpec("英文 Lv9 綜合閱讀", "財經英文", "把英文閱讀能力整合到研究流程中。", [
+    "整篇摘要", "關鍵段落排序", "最值得重讀的句子", "風險最高段", "最樂觀段", "最保守段", "你會抄下的字", "可疑訊號", "研究備忘錄", "最終判讀",
+  ]),
+];
+
+const TRADING_LEVELS = [
+  levelSpec("交易 Lv0 風控先行", "風控", "先學會保命，再談賺錢。", [
+    "最大虧損", "停損位置", "單筆風險", "總資金風險", "錯誤成本", "連虧應對", "部位縮小", "先看風險", "報酬幻覺", "情緒止損",
+  ]),
+  levelSpec("交易 Lv1 部位管理", "風控", "把風險轉成具體部位大小。", [
+    "部位大小", "風險單位", "波動大小", "加碼條件", "減碼條件", "資金分配", "集中風險", "相關性", "單筆上限", "風險一致性",
+  ]),
+  levelSpec("交易 Lv2 進場規則", "技術分析", "沒有明確規則的進場等於沒有系統。", [
+    "突破進場", "回測進場", "趨勢確認", "量價配合", "假突破", "等待訊號", "進場清單", "市場噪音", "條件不足", "好機會定義",
+  ]),
+  levelSpec("交易 Lv3 出場與停利", "技術分析", "出場規則和進場規則一樣重要。", [
+    "停利邏輯", "移動停損", "保本處理", "趨勢反轉", "目標價", "時間停損", "訊號失效", "出場紀律", "提早下車", "抱單壓力",
+  ]),
+  levelSpec("交易 Lv4 回測框架", "回測", "把想法變成可驗證規則。", [
+    "進出場定義", "樣本期間", "市場條件", "勝率", "盈虧比", "期望值", "最大回撤", "過度擬合", "樣本外測試", "回測紀錄",
+  ]),
+  levelSpec("交易 Lv5 紀錄系統", "紀律", "沒有紀錄就很難知道自己哪裡在失控。", [
+    "交易日誌", "犯錯分類", "情緒紀錄", "規則違反", "回顧頻率", "圖表存檔", "進場理由", "出場理由", "復盤問題", "改進方向",
+  ]),
+  levelSpec("交易 Lv6 市場判讀", "技術分析", "市場環境會決定策略是否適用。", [
+    "震盪盤", "趨勢盤", "假訊號", "波動擴大", "量能萎縮", "關鍵支撐", "關鍵壓力", "多空切換", "高低點結構", "市場節奏",
+  ]),
+  levelSpec("交易 Lv7 系統期待值", "回測", "把單筆結果拉回整體系統。", [
+    "期望值", "勝率迷思", "大賺小賠", "小賺大賠", "交易成本", "滑價", "樣本數", "回撤容忍", "長期期待", "策略穩定性",
+  ]),
+  levelSpec("交易 Lv8 壓力管理", "紀律", "系統真正的敵人常常是自己。", [
+    "報復單", "追價衝動", "錯失恐懼", "過度交易", "連勝鬆懈", "連虧懷疑", "交易疲勞", "中斷規則", "停手機制", "情緒恢復",
+  ]),
+  levelSpec("交易 Lv9 系統整合", "回測", "把策略、風控與紀律整成一套可持續流程。", [
+    "完整流程", "盤前檢查", "進場授權", "出場授權", "違規處理", "每週回顧", "每月檢查", "策略淘汰", "調整條件", "最終紀律",
+  ]),
+];
+
+const GROWTH_LEVELS = [
+  levelSpec("成長 Lv0 專注啟動", "專注", "先把專注環境搭起來。", [
+    "深度工作時段", "手機干擾", "桌面整理", "單一目標", "開始儀式", "結束儀式", "專注阻力", "最小啟動", "番茄節奏", "中斷處理",
+  ]),
+  levelSpec("成長 Lv1 時間區塊", "時間管理", "先分配，再執行。", [
+    "三段時間區塊", "黃金時段", "低能量任務", "行程留白", "緩衝時間", "明日規劃", "日程排序", "優先順序", "時間浪費點", "行程可行性",
+  ]),
+  levelSpec("成長 Lv2 習慣最小化", "習慣建立", "先小到能連續做。", [
+    "目標習慣", "最小版本", "觸發點", "行為綁定", "環境提示", "失敗門檻", "七天持續", "習慣堆疊", "身份認同", "小幅加量",
+  ]),
+  levelSpec("成長 Lv3 深度工作", "深度工作", "練習進入長時間高品質輸出。", [
+    "90 分鐘專注", "工作切片", "高能任務", "注意力回收", "干擾紀錄", "休息節點", "輸出標準", "專注指標", "低效訊號", "深度回顧",
+  ]),
+  levelSpec("成長 Lv4 拖延拆解", "習慣建立", "把阻力拆開來處理。", [
+    "拖延觸發點", "任務模糊", "害怕失敗", "開始困難", "完美主義", "逃避行為", "降低門檻", "先做兩分鐘", "阻力紀錄", "破局步驟",
+  ]),
+  levelSpec("成長 Lv5 能量管理", "時間管理", "不是所有時間都適合做一樣的事。", [
+    "高能時段", "低能修復", "睡眠影響", "飲食波動", "注意力耗損", "午間低潮", "恢復策略", "能量日誌", "高價值安排", "節奏穩定",
+  ]),
+  levelSpec("成長 Lv6 每週回顧", "深度工作", "讓系統每週都可修正。", [
+    "本週完成", "本週卡點", "下週優先", "習慣成功率", "拖延原因", "環境修正", "時間分配", "輸出品質", "學習進度", "回顧節點",
+  ]),
+  levelSpec("成長 Lv7 決策清晰", "專注", "減少反覆橫跳與內耗。", [
+    "今天只做一條主線", "決策條件", "放棄清單", "資訊過載", "同時做太多", "切換成本", "選擇疲勞", "預先承諾", "界線設定", "結束判準",
+  ]),
+  levelSpec("成長 Lv8 學習系統", "習慣建立", "把學習變成可複製流程。", [
+    "輸入流程", "輸出流程", "複習節點", "筆記格式", "任務拆解", "驗收方式", "週期檢查", "知識回收", "作品化", "主題聚焦",
+  ]),
+  levelSpec("成長 Lv9 執行整合", "深度工作", "讓時間、專注、習慣與回顧接起來。", [
+    "完整日流程", "週期節奏", "高低優先級", "每日啟動", "每日收尾", "系統脆弱點", "備援方案", "持續性風險", "修正策略", "執行總結",
+  ]),
+];
+
+const DAILY_ENGLISH_LEVELS = [
+  dailyEnglishSpec("日常英語 Lv0 生存句", "最短句先開口，先敢講。"),
+  dailyEnglishSpec("日常英語 Lv1 日常流程", "把一天常見情境變成固定句。"),
+  dailyEnglishSpec("日常英語 Lv2 問答反應", "從單句進到來回兩句。"),
+  dailyEnglishSpec("日常英語 Lv3 禮貌表達", "加入請求、拒絕與緩衝語氣。"),
+  dailyEnglishSpec("日常英語 Lv4 描述能力", "能更完整描述人事時地物。"),
+  dailyEnglishSpec("日常英語 Lv5 情緒與想法", "開始自然表達想法與感受。"),
+  dailyEnglishSpec("日常英語 Lv6 工作學習", "能應付學習與工作中的小互動。"),
+  dailyEnglishSpec("日常英語 Lv7 社交互動", "把對話延長，不只回答 yes/no。"),
+  dailyEnglishSpec("日常英語 Lv8 旅行應對", "能更穩定地在陌生情境開口。"),
+  dailyEnglishSpec("日常英語 Lv9 自然輸出", "把句型、詞彙和反應速度接起來。"),
+];
+
+function levelSpec(title, skill, materialLead, subtopics) {
+  return { title, skill, materialLead, subtopics };
+}
+
+function dailyEnglishSpec(title, materialLead) {
+  return {
+    title,
+    skill: "口說表達",
+    materialLead,
+    subtopics: DAILY_ENGLISH_SCENARIOS,
+  };
+}
+
+function titleCaseLevel(level) {
+  return "Lv" + level;
+}
+
+function slugify(value) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export function createCustomTopicId(title, existingIds) {
+  const base = slugify("custom-" + String(title || "").trim()) || "custom-topic";
+  const existing = new Set(existingIds || []);
+  if (!existing.has(base)) {
+    return base;
+  }
+  let suffix = 2;
+  while (existing.has(base + "-" + suffix)) {
+    suffix += 1;
+  }
+  return base + "-" + suffix;
+}
+
+function loadCountFromSettings(settings) {
+  switch (settings?.dailyLoad) {
+    case "balanced":
+      return 2;
+    case "intensive":
+      return 3;
+    default:
+      return 1;
+  }
+}
+
+function timerMultiplier(settings) {
+  if (settings?.timerMode === "relaxed") {
+    return 1.5;
+  }
+  return 1;
+}
+
+function getHintIncrement(settings) {
+  if (settings?.hintMode === "coach") {
+    return 2;
+  }
+  return 1;
+}
+
+function getReviewThresholds(settings, quest) {
+  const questionWeight = quest.questions.length * 48;
+  if (settings?.reviewMode === "strict") {
+    return {
+      minFailLength: Math.max(55, quest.questions.length * 22),
+      passLength: Math.max(180, questionWeight + 20),
+      passCoverage: 0.85,
+      reinforceCoverage: 0.6,
+    };
+  }
+  if (settings?.reviewMode === "coaching") {
+    return {
+      minFailLength: Math.max(35, quest.questions.length * 16),
+      passLength: Math.max(120, questionWeight - 30),
+      passCoverage: 0.68,
+      reinforceCoverage: 0.45,
+    };
+  }
+  return {
+    minFailLength: Math.max(45, quest.questions.length * 18),
+    passLength: Math.max(150, questionWeight),
+    passCoverage: 0.75,
+    reinforceCoverage: 0.5,
+  };
+}
+
+function keywordList(topic, levelTitle, label, extras) {
+  return [label, topic.primarySkill, levelTitle, ...(extras || [])];
+}
+
+function buildStandardQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, totalPerLevel) {
+  const questId = topic.id + "-" + levelIndex + "-" + String(itemIndex + 1).padStart(2, "0");
+  const lowMinutes = topic.id === "analyst" ? 20 : topic.id === "dailyEnglish" ? 8 : 10;
+  const seconds = Math.round((lowMinutes + levelIndex + (itemIndex % 3) * 2) * 60);
+  const expBase = topic.id === "analyst" ? 52 : topic.id === "dailyEnglish" ? 20 : 28;
+  const exp = expBase + levelIndex * 6 + (itemIndex % 4) * 2;
+  const lead = levelSpecData.materialLead;
+  const rubric = [
+    {
+      concept: "說明核心概念",
+      keywords: keywordList(topic, levelSpecData.title, itemLabel, [topic.title]),
+      followUp: "請把 " + itemLabel + " 用自己的話重新解釋一次。",
+      coachNote: "先定義它，再說它在這個主題裡的作用。",
+    },
+    {
+      concept: "指出判斷方式",
+      keywords: keywordList(topic, levelSpecData.title, itemLabel, ["判斷", "標準"]),
+      followUp: "你會用什麼標準判斷 " + itemLabel + " 做得好或不好？",
+      coachNote: "不要只下結論，要說判斷依據。",
+    },
+    {
+      concept: "加入情境或例子",
+      keywords: keywordList(topic, levelSpecData.title, itemLabel, ["例子", "情境", "應用"]),
+      followUp: "請補一個你能想像的例子，讓答案更落地。",
+      coachNote: "用例子可以看出你是不是真的理解。",
+    },
+  ];
+
+  if (topic.id === "dailyEnglish") {
+    return {
+      id: questId,
+      topic: topic.id,
+      skill: levelSpecData.skill,
+      type: "standard",
+      title: levelSpecData.title + " " + String(itemIndex + 1).padStart(2, "0") + "｜" + itemLabel,
+      track: topic.title + " / " + levelSpecData.skill,
+      minLevel: levelIndex,
+      maxLevel: levelIndex,
+      seconds,
+      exp,
+      materialTitle: "學習資料：" + lead,
+      materials: [
+        lead,
+        "本題情境：" + itemLabel,
+        "先用最短句說得出來，再嘗試延長一句。",
+        "回答時至少寫一句英文，再補一句中文說明。"
+      ],
+      questions: [
+        "如果情境是「" + itemLabel + "」，你會怎麼用英文開口？",
+        "請寫一句英文和一句中文說明，讓人看得出你的意思。",
+        "這個情境最常用的關鍵字或句型是什麼？",
+      ],
+      rubric,
+      clear: "至少寫一句英文、一句中文，並指出一個關鍵字或句型。",
+      hints: [
+        "先從最短句開始，不用一次講很長。",
+        "把主詞、動詞、關鍵名詞先湊齊。",
+        "如果不確定，就先用最常見的日常句型。 ",
+      ],
+    };
+  }
+
+  return {
+    id: questId,
+    topic: topic.id,
+    skill: levelSpecData.skill,
+    type: "standard",
+    title: levelSpecData.title + " " + String(itemIndex + 1).padStart(2, "0") + "｜" + itemLabel,
+    track: topic.title + " / " + levelSpecData.skill,
+    minLevel: levelIndex,
+    maxLevel: levelIndex,
+    seconds,
+    exp,
+    materialTitle: "學習資料：" + lead,
+    materials: [
+      lead,
+      "本題焦點：" + itemLabel,
+      "先用自己的話定義，再補判斷標準。",
+      "最後補一個例子，讓答案更有驗收性。"
+    ],
+    questions: [
+      itemLabel + " 在這個 level 代表什麼？",
+      "你會怎麼判斷 " + itemLabel + " 做得好或不好？",
+      "請用一個情境、例子或反例說明 " + itemLabel + "。",
+    ],
+    rubric,
+    clear: "請回答三題，至少包含定義、判斷方式與一個例子。",
+    hints: [
+      "先解釋概念本身，再說它的用途。",
+      "如果只講定義，答案通常不夠完整。",
+      "用例子或反例，最能看出是否真的理解。",
+    ],
+  };
+}
+
+function generateLevelPool(topic, levelSpecs, countPerLevel) {
+  const quests = [];
+  levelSpecs.forEach(function (spec, levelIndex) {
+    const items = spec.subtopics.slice(0, countPerLevel);
+    items.forEach(function (itemLabel, itemIndex) {
+      quests.push(buildStandardQuest(topic, levelIndex, spec, itemLabel, itemIndex, countPerLevel));
+    });
+  });
+  return quests;
+}
+
+function buildBuiltinQuestPools() {
+  const topicMap = Object.fromEntries(BUILTIN_TOPICS.map(function (topic) { return [topic.id, topic]; }));
+  return {
+    analyst: generateLevelPool(topicMap.analyst, ANALYST_LEVELS, STANDARD_QUESTS_PER_LEVEL),
+    english: generateLevelPool(topicMap.english, ENGLISH_LEVELS, STANDARD_QUESTS_PER_LEVEL),
+    dailyEnglish: generateLevelPool(topicMap.dailyEnglish, DAILY_ENGLISH_LEVELS, DAILY_ENGLISH_QUESTS_PER_LEVEL),
+    trading: generateLevelPool(topicMap.trading, TRADING_LEVELS, STANDARD_QUESTS_PER_LEVEL),
+    growth: generateLevelPool(topicMap.growth, GROWTH_LEVELS, STANDARD_QUESTS_PER_LEVEL),
+  };
+}
+
+function createCustomTopicPool(topic) {
+  const actions = ["定義", "拆解", "比較", "辨識", "應用", "舉例", "反思", "追問", "總結", "復盤"];
+  const skills = topic.skills.length ? topic.skills : [topic.primarySkill];
+  const specs = Array.from({ length: LEVEL_COUNT }, function (_, levelIndex) {
+    return {
+      title: topic.title + " " + titleCaseLevel(levelIndex),
+      skill: skills[levelIndex % skills.length] || topic.primarySkill,
+      materialLead: "這一層先圍繞「" + (skills[levelIndex % skills.length] || topic.primarySkill) + "」建立你的主題框架。",
+      subtopics: actions.map(function (action, actionIndex) {
+        const skill = skills[(levelIndex + actionIndex) % skills.length] || topic.primarySkill;
+        return skill + action;
+      }),
+    };
+  });
+  return generateLevelPool(topic, specs, STANDARD_QUESTS_PER_LEVEL);
+}
+
+function normalizeCustomTopic(topic) {
+  const title = (topic.title || "").trim();
+  const skills = Array.isArray(topic.skills)
+    ? topic.skills.filter(Boolean)
+    : String(topic.skills || "")
+        .split(/[,，/]/)
+        .map(function (item) { return item.trim(); })
+        .filter(Boolean);
+  const id = topic.id || createCustomTopicId(title, []);
+  return {
+    id,
+    title,
+    goal: topic.goal || "建立屬於這個主題的長期學習系統",
+    skills: skills.length ? skills : [topic.primarySkill || title],
+    primarySkill: topic.primarySkill || skills[0] || title,
+    baseMaxExp: topic.baseMaxExp || 130,
+    expStep: topic.expStep || 45,
+    accent: topic.accent || "cyan",
+    bossTitle: topic.bossTitle || title + " Boss",
+    bossQuestions: topic.bossQuestions || ["核心概念是什麼？", "你真的理解了嗎？", "最大的卡點在哪？", "下一步要做什麼？"],
+    projectTitle: topic.projectTitle || title + " 月度作品",
+    projectSteps: topic.projectSteps || ["核心概念", "練習紀錄", "應用例子", "補強點", "總結"],
+    custom: true,
+  };
+}
+
+export function buildTopicRegistry(customTopics) {
+  const normalizedCustomTopics = (customTopics || []).map(normalizeCustomTopic);
+  const allTopics = [...BUILTIN_TOPICS, ...normalizedCustomTopics];
+  const topicMeta = Object.fromEntries(allTopics.map(function (topic) { return [topic.id, topic]; }));
+  const topicOrder = allTopics.map(function (topic) { return topic.id; });
+  const progressDefaults = Object.fromEntries(
+    allTopics.map(function (topic) {
+      return [topic.id, { level: 0, exp: 0, maxExp: topic.baseMaxExp }];
+    }),
+  );
+  const questPools = { ...buildBuiltinQuestPools() };
+  normalizedCustomTopics.forEach(function (topic) {
+    questPools[topic.id] = createCustomTopicPool(topic);
+  });
+
+  return {
+    customTopics: normalizedCustomTopics,
+    topicMeta,
+    topicOrder,
+    questPools,
+    progressDefaults,
+  };
+}
+
+export function getDailyLoadCount(settings) {
+  return loadCountFromSettings(settings);
+}
+
+export function getTimerMultiplier(settings) {
+  return timerMultiplier(settings);
+}
+
+export function getHintStep(settings) {
+  return getHintIncrement(settings);
+}
+
+export function getThresholdPreset(settings, quest) {
+  return getReviewThresholds(settings, quest);
+}

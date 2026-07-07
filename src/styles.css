@@ -2,22 +2,43 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  color-scheme: dark;
+  font-family: Inter, "Noto Sans TC", system-ui, sans-serif;
+  background: #07111f;
+}
+
 * {
   box-sizing: border-box;
+}
+
+html {
+  background: #07111f;
 }
 
 body {
   margin: 0;
   min-width: 320px;
+  background:
+    radial-gradient(circle at top, rgba(34, 211, 238, 0.08), transparent 26%),
+    linear-gradient(180deg, #09111c 0%, #07111f 100%);
+  color: #e5eefb;
 }
 
 button,
-textarea {
+textarea,
+input {
   font: inherit;
 }
 
 button:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+input:focus-visible {
   outline: 3px solid #38bdf8;
   outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.28);
+  color: #f8fbff;
 }

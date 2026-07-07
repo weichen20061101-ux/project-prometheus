@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  BadgePlus,
   BookOpenCheck,
   Brain,
   CheckCircle2,
@@ -9,157 +10,159 @@ import {
   Flame,
   Lightbulb,
   Lock,
+  MoonStar,
   NotebookPen,
   Play,
+  Settings2,
   Sparkles,
   Swords,
   Target,
   Timer,
   Trophy,
 } from "lucide-react";
-import analystPool from "../data/quest-pool/analyst.json";
-import englishPool from "../data/quest-pool/english.json";
-import growthPool from "../data/quest-pool/growth.json";
-import tradingPool from "../data/quest-pool/trading.json";
+import {
+  buildTopicRegistry,
+  createCustomTopicId,
+  DEFAULT_SETTINGS,
+  getDailyLoadCount,
+  getHintStep,
+  getThresholdPreset,
+  getTimerMultiplier,
+  SETTINGS_OPTIONS,
+} from "./topicSystem";
 import "./styles.css";
 
-const STORAGE_KEY = "prometheus-app-state-v1";
+const STORAGE_KEY = "prometheus-app-state-v2";
 const BOSS_START_HP = 100;
-const OTHER_TOPICS = ["english", "trading", "growth"];
-const TOPIC_ORDER = ["analyst", "english", "trading", "growth"];
-const TOPIC_META = {
-  analyst: {
-    id: "analyst",
-    title: "分析師之路",
-    goal: "三年後具備獨立研究公司的能力",
-    skills: ["經濟學", "財報分析", "公司分析", "產業分析", "總經", "投資學"],
-    primarySkill: "財報分析",
-    baseMaxExp: 300,
-    expStep: 60,
-  },
-  english: {
-    id: "english",
-    title: "英文",
-    goal: "能閱讀英文年報與法說會",
-    skills: ["財經英文", "閱讀", "寫作", "字彙"],
-    primarySkill: "財經英文",
-    baseMaxExp: 120,
-    expStep: 40,
-  },
-  trading: {
-    id: "trading",
-    title: "交易系統",
-    goal: "建立自己的交易框架",
-    skills: ["技術分析", "風控", "回測", "紀律"],
-    primarySkill: "風控紀律",
-    baseMaxExp: 120,
-    expStep: 40,
-  },
-  growth: {
-    id: "growth",
-    title: "個人成長",
-    goal: "建立穩定執行系統",
-    skills: ["專注", "時間管理", "深度工作", "習慣建立"],
-    primarySkill: "深度工作",
-    baseMaxExp: 150,
-    expStep: 50,
-  },
-};
-const DEFAULT_PROGRESS = {
-  analyst: { level: 1, exp: 80, maxExp: 300 },
-  english: { level: 0, exp: 30, maxExp: 120 },
-  trading: { level: 0, exp: 0, maxExp: 120 },
-  growth: { level: 1, exp: 45, maxExp: 150 },
-};
-const QUEST_POOLS = {
-  analyst: analystPool,
-  english: englishPool,
-  trading: tradingPool,
-  growth: growthPool,
-};
 
 function App() {
   const initialState = useMemo(loadInitialState, []);
+  const [customTopics, setCustomTopics] = useState(initialState.customTopics);
+  const [learningSettings, setLearningSettings] = useState(initialState.learningSettings);
   const [activeStory, setActiveStory] = useState(initialState.activeStory);
   const [progressByTopic, setProgressByTopic] = useState(initialState.progressByTopic);
   const [dailyState, setDailyState] = useState(initialState.dailyState);
+  const [topicDraft, setTopicDraft] = useState({
+    title: "",
+    goal: "",
+    primarySkill: "",
+    skillsText: "",
+  });
+
+  const registry = useMemo(function () {
+    return buildTopicRegistry(customTopics);
+  }, [customTopics]);
+  const { topicMeta, topicOrder, questPools, progressDefaults, customTopics: normalizedCustomTopics } = registry;
+  const normalizedProgress = useMemo(function () {
+    return normalizeProgress(progressByTopic, progressDefaults, topicOrder, topicMeta);
+  }, [progressByTopic, progressDefaults, topicOrder, topicMeta]);
+  const currentDailyState = useMemo(function () {
+    return syncDailyState(dailyState, normalizedProgress, questPools, topicOrder, learningSettings);
+  }, [dailyState, normalizedProgress, questPools, topicOrder, learningSettings]);
+
+  useEffect(
+    function () {
+      const syncedProgress = normalizeProgress(progressByTopic, progressDefaults, topicOrder, topicMeta);
+      if (JSON.stringify(syncedProgress) !== JSON.stringify(progressByTopic)) {
+        setProgressByTopic(syncedProgress);
+      }
+    },
+    [progressByTopic, progressDefaults, topicOrder, topicMeta],
+  );
+
+  useEffect(
+    function () {
+      if (JSON.stringify(currentDailyState) !== JSON.stringify(dailyState)) {
+        setDailyState(currentDailyState);
+      }
+    },
+    [currentDailyState, dailyState],
+  );
+
+  useEffect(
+    function () {
+      if (learningSettings.timerMode === "off") {
+        return undefined;
+      }
+      const timer = window.setInterval(function () {
+        setDailyState(function (current) {
+          let changed = false;
+          const nextTimeLeft = { ...current.timeLeft };
+          current.startedQuestIds.forEach(function (questId) {
+            if (!current.completedQuestIds.includes(questId) && nextTimeLeft[questId] > 0) {
+              nextTimeLeft[questId] -= 1;
+              changed = true;
+            }
+          });
+          if (!changed) {
+            return current;
+          }
+          return { ...current, timeLeft: nextTimeLeft };
+        });
+      }, 1000);
+      return function () {
+        window.clearInterval(timer);
+      };
+    },
+    [learningSettings.timerMode],
+  );
+
+  useEffect(
+    function () {
+      saveAppState({
+        activeStory: topicMeta[activeStory] ? activeStory : "analyst",
+        customTopics: normalizedCustomTopics,
+        learningSettings,
+        progressByTopic: normalizedProgress,
+        dailyState: currentDailyState,
+      });
+    },
+    [activeStory, normalizedCustomTopics, learningSettings, normalizedProgress, currentDailyState, topicMeta],
+  );
 
   const questIndex = useMemo(function () {
     const entries = [];
-    Object.values(QUEST_POOLS).forEach(function (pool) {
+    Object.values(questPools).forEach(function (pool) {
       pool.forEach(function (quest) {
         entries.push([quest.id, quest]);
       });
     });
     return Object.fromEntries(entries);
-  }, []);
+  }, [questPools]);
 
-  const gateQuest = dailyState.gateQuestId ? questIndex[dailyState.gateQuestId] : null;
-  const unlockedQuests = useMemo(function () {
-    return OTHER_TOPICS.map(function (topic) {
-      const questId = dailyState.topicQuestIds[topic];
-      return questId ? questIndex[questId] : null;
-    }).filter(Boolean);
-  }, [dailyState.topicQuestIds, questIndex]);
-  const focusedQuestId = dailyState.focusQuestId || dailyState.gateQuestId;
-  const focusedQuest = focusedQuestId ? questIndex[focusedQuestId] : gateQuest;
-  const currentStory = TOPIC_META[activeStory];
-  const totalEarnedExp = useMemo(function () {
-    return Object.values(dailyState.awardedExp).reduce(function (sum, value) {
-      return sum + value;
-    }, 0);
-  }, [dailyState.awardedExp]);
-  const completedCount = dailyState.submittedQuestIds.length;
-  const focusMinutes = completedCount === 0 ? "0/60" : completedCount === 1 ? "30/60" : "50/60";
-  const gateCompleted = dailyState.submittedQuestIds.includes(dailyState.gateQuestId);
-
-  useEffect(function () {
-    const timer = window.setInterval(function () {
-      setDailyState(function (current) {
-        let changed = false;
-        const nextTimeLeft = { ...current.timeLeft };
-        current.startedQuestIds.forEach(function (questId) {
-          if (!current.submittedQuestIds.includes(questId) && nextTimeLeft[questId] > 0) {
-            nextTimeLeft[questId] -= 1;
-            changed = true;
-          }
-        });
-        if (!changed) {
-          return current;
-        }
-        return { ...current, timeLeft: nextTimeLeft };
-      });
-    }, 1000);
-    return function () {
-      window.clearInterval(timer);
-    };
-  }, []);
-
-  useEffect(function () {
-    saveAppState({
-      activeStory,
-      progressByTopic,
-      dailyState,
-    });
-  }, [activeStory, progressByTopic, dailyState]);
+  const currentStory = topicMeta[activeStory] || topicMeta.analyst;
+  const gateQuest = currentDailyState.gateQuestId ? questIndex[currentDailyState.gateQuestId] : null;
+  const gateCompleted = currentDailyState.completedQuestIds.includes(currentDailyState.gateQuestId);
+  const totalEarnedExp = Object.values(currentDailyState.awardedExp).reduce(function (sum, value) {
+    return sum + value;
+  }, 0);
+  const activeQuestIds = currentDailyState.topicQuestIds[activeStory] || [];
+  const activeTopicQuests = activeQuestIds.map(function (questId) {
+    return questIndex[questId];
+  }).filter(Boolean);
+  const visibleHints = currentDailyState.focusQuestId ? questIndex[currentDailyState.focusQuestId]?.hints || [] : [];
 
   function startQuest(quest) {
     setDailyState(function (current) {
       const startedQuestIds = current.startedQuestIds.includes(quest.id)
         ? current.startedQuestIds
         : [...current.startedQuestIds, quest.id];
+      const multiplier = getTimerMultiplier(learningSettings);
       return {
         ...current,
         startedQuestIds,
         focusQuestId: quest.id,
         reviewMessage:
-          quest.type === "daily_gate"
-            ? "今日必修任務已開始。先完成分析師首題，其他主題才會解鎖。"
-            : quest.title + " 已開始。請先讀題，再用自己的話作答。",
+          activeStory === "analyst" && quest.id === current.gateQuestId
+            ? "今日分析師首題已開始。先用自己的話回答，再看系統的補強追問。"
+            : quest.title + " 已開始。先讀學習資料，再用自己的話作答。",
         hintLevel: 0,
         timeLeft: {
           ...current.timeLeft,
-          [quest.id]: current.timeLeft[quest.id] ?? quest.seconds,
+          [quest.id]:
+            learningSettings.timerMode === "off"
+              ? 0
+              : current.timeLeft[quest.id] ?? Math.round(quest.seconds * multiplier),
         },
       };
     });
@@ -178,32 +181,36 @@ function App() {
   }
 
   function showHint() {
-    if (!focusedQuest) {
+    if (!currentDailyState.focusQuestId) {
       return;
     }
     setDailyState(function (current) {
+      const focusedQuest = questIndex[current.focusQuestId];
+      const nextStep = getHintStep(learningSettings);
       return {
         ...current,
-        focusQuestId: focusedQuest.id,
-        hintLevel: Math.min(focusedQuest.hints.length, current.hintLevel + 1),
+        hintLevel: Math.min(focusedQuest.hints.length, current.hintLevel + nextStep),
       };
     });
   }
 
   function submitQuest(quest) {
-    const answer = (dailyState.answers[quest.id] || "").trim();
-    if (!dailyState.startedQuestIds.includes(quest.id)) {
+    const answer = (currentDailyState.answers[quest.id] || "").trim();
+    if (!currentDailyState.startedQuestIds.includes(quest.id) && learningSettings.timerMode !== "off") {
       setDailyState(function (current) {
         return {
           ...current,
           focusQuestId: quest.id,
-          reviewMessage: "請先按開始測驗，讓系統進入倒數與作答狀態。",
+          reviewMessage: "請先按開始測驗，讓系統進入作答狀態。",
         };
       });
       return;
     }
 
-    const evaluation = evaluateAnswer(answer, quest);
+    const existingAward = currentDailyState.awardedExp[quest.id] || 0;
+    const existingResult = currentDailyState.results[quest.id];
+    const evaluation = evaluateAnswer(answer, quest, learningSettings);
+
     if (evaluation.status === "fail") {
       setDailyState(function (current) {
         return {
@@ -219,33 +226,39 @@ function App() {
       return;
     }
 
-    const alreadySubmitted = dailyState.submittedQuestIds.includes(quest.id);
-    if (alreadySubmitted) {
+    if (existingResult?.status === "pass") {
       setDailyState(function (current) {
         return {
           ...current,
           focusQuestId: quest.id,
-          reviewMessage: "這題今天已經通過驗收，進度已記錄。",
+          reviewMessage: "這題已經完整通過驗收，進度與 EXP 都已記錄。",
         };
       });
       return;
     }
 
-    const nextProgress = applyQuestReward(progressByTopic, quest.topic, evaluation.awardedExp);
-    setProgressByTopic(nextProgress);
+    const deltaExp = Math.max(0, evaluation.awardedExp - existingAward);
+    if (deltaExp > 0) {
+      setProgressByTopic(function (current) {
+        return applyQuestReward(current, quest.topic, deltaExp, topicMeta);
+      });
+    }
+
     setDailyState(function (current) {
+      const nextCompletedQuestIds = current.completedQuestIds.includes(quest.id)
+        ? current.completedQuestIds
+        : [...current.completedQuestIds, quest.id];
       const nextUnlockedTopics =
-        quest.type === "daily_gate"
-          ? [...new Set([...current.unlockedTopics, ...OTHER_TOPICS])]
+        quest.id === current.gateQuestId
+          ? topicOrder.filter(function (topicId) { return topicId !== "analyst"; })
           : current.unlockedTopics;
-      const nextBossHp = Math.max(0, current.bossHp - (quest.type === "daily_gate" ? 34 : 14));
       return {
         ...current,
-        unlockedTopics: nextUnlockedTopics,
-        submittedQuestIds: [...current.submittedQuestIds, quest.id],
+        completedQuestIds: nextCompletedQuestIds,
         focusQuestId: quest.id,
         hintLevel: 0,
-        bossHp: nextBossHp,
+        unlockedTopics: nextUnlockedTopics,
+        bossHp: Math.max(0, current.bossHp - (quest.topic === "analyst" ? 12 : 8)),
         awardedExp: {
           ...current.awardedExp,
           [quest.id]: evaluation.awardedExp,
@@ -255,190 +268,301 @@ function App() {
           [quest.id]: evaluation,
         },
         reviewMessage:
-          quest.type === "daily_gate"
-            ? evaluation.reviewAfterPass ||
-              "分析師首題已通過，其他主題任務已解鎖，今天可以繼續往下攻略。"
-            : evaluation.reviewAfterPass ||
-              "任務已通過驗收，請查看技能進度並選下一題。",
+          evaluation.reviewAfterPass ||
+          (evaluation.status === "reinforce"
+            ? "這題先通過，但還有缺口。建議先補答，再切下一題。"
+            : "任務通過，進度已更新。可以繼續今天的下一題。"),
       };
     });
   }
 
   function resetDay() {
-    setDailyState(createDailyState(progressByTopic, getDateKey()));
+    setDailyState(createDailyState(normalizedProgress, getDateKey(), questPools, topicOrder, learningSettings));
   }
 
+  function updateSetting(key, value) {
+    setLearningSettings(function (current) {
+      return { ...current, [key]: value };
+    });
+  }
+
+  function updateTopicDraft(key, value) {
+    setTopicDraft(function (current) {
+      return { ...current, [key]: value };
+    });
+  }
+
+  function addCustomTopic() {
+    const title = topicDraft.title.trim();
+    const primarySkill = topicDraft.primarySkill.trim();
+    if (!title || !primarySkill) {
+      return;
+    }
+    const nextId = createCustomTopicId(
+      title,
+      [...customTopics, ...normalizedCustomTopics].map(function (topic) {
+        return topic.id;
+      }),
+    );
+    const nextTopic = {
+      id: nextId,
+      title,
+      goal: topicDraft.goal.trim() || "為這個主題建立一套可持續學習流程",
+      primarySkill,
+      skills: topicDraft.skillsText
+        .split(/[,，/]/)
+        .map(function (item) { return item.trim(); })
+        .filter(Boolean),
+    };
+    setCustomTopics(function (current) {
+      return [...current, nextTopic];
+    });
+    setProgressByTopic(function (current) {
+      return {
+        ...current,
+        [nextId]: {
+          level: 0,
+          exp: 0,
+          maxExp: 130,
+        },
+      };
+    });
+    setTopicDraft({
+      title: "",
+      goal: "",
+      primarySkill: "",
+      skillsText: "",
+    });
+    setActiveStory(nextId);
+  }
+
+  const activeStatus = deriveTopicStatus(activeStory, normalizedProgress[activeStory], gateCompleted);
+  const activeBoss = currentStory.bossQuestions || [];
+  const activeProject = currentStory.projectSteps || [];
+
   return (
-    <main className="min-h-screen bg-[#f6f7f2] text-slate-950">
-      <section className="border-b border-slate-200 bg-[#16251f] text-white">
-        <div className="mx-auto grid max-w-7xl gap-8 px-5 py-7 md:grid-cols-[1.15fr_0.85fr] md:px-8">
+    <main className="min-h-screen bg-[#07111f] text-slate-100">
+      <section className="border-b border-cyan-500/10 bg-[#09192d]">
+        <div className="mx-auto grid max-w-7xl gap-8 px-5 py-8 md:grid-cols-[1.2fr_0.8fr] md:px-8">
           <div>
-            <p className="inline-flex items-center gap-2 rounded-full border border-emerald-200/30 bg-white/10 px-3 py-1 text-sm text-emerald-100">
-              <Sparkles size={16} /> Project Prometheus
+            <p className="inline-flex items-center gap-2 rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-sm text-cyan-200">
+              <MoonStar size={15} /> Project Prometheus
             </p>
-            <h1 className="mt-4 max-w-3xl text-4xl font-black leading-tight md:text-6xl">知識攻略系統</h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-200 md:text-lg">
-              每天先完成一題分析師之路的必修任務，再解鎖其他主題。系統會依主題等級抽題，並保存你的當日進度。
+            <h1 className="mt-4 text-4xl font-black tracking-tight text-white md:text-6xl">知識攻略系統</h1>
+            <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300 md:text-lg">
+              現在切到哪個主題，就只看那個主題的題目、進度與驗收。分析師首題仍然是每日解鎖入口。
             </p>
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/10 p-5 shadow-2xl">
+          <div className="rounded-2xl border border-cyan-400/15 bg-[#0d2038] p-5 shadow-[0_0_0_1px_rgba(34,211,238,0.08),0_30px_80px_rgba(2,12,27,0.45)]">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm text-emerald-100">今日限制</p>
-                <h2 className="mt-1 text-2xl font-black">先完成分析師首題</h2>
+                <p className="text-sm text-cyan-200">今日狀態</p>
+                <h2 className="mt-1 text-2xl font-black text-white">{currentStory.title}</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-300">{currentStory.goal}</p>
               </div>
-              <Target className="text-[#f2bf4a]" size={42} />
+              <Target className="text-cyan-300" size={42} />
             </div>
             <div className="mt-5 grid grid-cols-3 gap-3">
               <Metric label="EXP" value={totalEarnedExp} />
-              <Metric label="Quest" value={completedCount + "/4"} />
-              <Metric label="Time" value={focusMinutes} />
+              <Metric label="完成" value={currentDailyState.completedQuestIds.length + ""} />
+              <Metric label="模式" value={activeStatus} />
             </div>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-7xl gap-5 px-5 py-6 lg:grid-cols-[280px_1fr_360px] md:px-8">
+      <section className="mx-auto grid max-w-7xl gap-5 px-5 py-6 lg:grid-cols-[290px_1fr_360px] md:px-8">
         <aside className="space-y-5">
-          <Panel title="人生主線" icon={Flame}>
+          <Panel title="主題切換" icon={Flame}>
             <div className="space-y-2">
-              {TOPIC_ORDER.map(function (topicId) {
-                const story = TOPIC_META[topicId];
+              {topicOrder.map(function (topicId) {
+                const story = topicMeta[topicId];
+                const progress = normalizedProgress[topicId];
                 const active = topicId === activeStory;
+                const status = deriveTopicStatus(topicId, progress, gateCompleted);
                 return (
                   <button
-                    key={story.id}
-                    onClick={function () {
-                      setActiveStory(story.id);
-                    }}
+                    key={topicId}
+                    onClick={function () { setActiveStory(topicId); }}
                     className={
-                      "w-full rounded-lg border p-3 text-left transition " +
-                      (active ? "border-emerald-500 bg-emerald-50" : "border-slate-200 bg-white hover:border-slate-400")
+                      "w-full rounded-xl border px-4 py-3 text-left transition " +
+                      (active
+                        ? "border-cyan-400/40 bg-cyan-400/10 text-white"
+                        : "border-white/8 bg-[#0b1525] text-slate-200 hover:border-cyan-400/20")
                     }
                   >
-                    <span className="block font-bold">{story.title}</span>
-                    <span className="mt-1 block text-sm leading-5 text-slate-500">{story.goal}</span>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-bold">{story.title}</span>
+                      <span className="text-xs text-slate-400">Lv.{progress.level}</span>
+                    </div>
+                    <p className="mt-1 text-sm leading-5 text-slate-400">{story.primarySkill} / {status}</p>
                   </button>
                 );
               })}
             </div>
           </Panel>
 
-          <Panel title="技能樹" icon={Brain}>
+          <Panel title="技能進度" icon={Brain}>
             <div className="space-y-3">
-              {TOPIC_ORDER.map(function (topicId) {
-                const story = TOPIC_META[topicId];
-                const progress = progressByTopic[topicId];
-                const status = deriveTopicStatus(topicId, progress, gateCompleted);
-                const locked = status === "鎖定";
+              {topicOrder.map(function (topicId) {
+                const story = topicMeta[topicId];
+                const progress = normalizedProgress[topicId];
+                const locked = deriveTopicStatus(topicId, progress, gateCompleted) === "鎖定";
                 return (
-                  <div key={topicId} className="rounded-lg border border-slate-200 bg-white p-3">
+                  <div key={topicId} className="rounded-xl border border-white/8 bg-[#0b1525] p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
-                        <span className={"grid h-8 w-8 place-items-center rounded-md " + (locked ? "bg-slate-100 text-slate-400" : "bg-cyan-700 text-white")}>
+                        <span className={"grid h-8 w-8 place-items-center rounded-lg " + (locked ? "bg-slate-800 text-slate-500" : "bg-cyan-500/15 text-cyan-300")}>
                           {locked ? <Lock size={16} /> : <Brain size={16} />}
                         </span>
                         <div>
-                          <p className="font-bold">{story.primarySkill}</p>
-                          <p className="text-xs text-slate-500">
-                            Lv.{progress.level} / {status}
-                          </p>
+                          <p className="font-bold text-slate-100">{story.primarySkill}</p>
+                          <p className="text-xs text-slate-400">{story.title}</p>
                         </div>
                       </div>
-                      <span className="text-sm font-bold text-slate-500">
-                        {progress.exp}/{progress.maxExp}
-                      </span>
+                      <span className="text-sm font-bold text-slate-300">{progress.exp}/{progress.maxExp}</span>
                     </div>
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-cyan-600" style={{ width: Math.min(100, Math.round((progress.exp / progress.maxExp) * 100)) + "%" }} />
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800">
+                      <div className="h-full rounded-full bg-cyan-400" style={{ width: Math.min(100, Math.round((progress.exp / progress.maxExp) * 100)) + "%" }} />
                     </div>
                   </div>
                 );
               })}
             </div>
           </Panel>
+
+          <Panel title="新增主題" icon={BadgePlus}>
+            <div className="space-y-3">
+              <input value={topicDraft.title} onChange={function (event) { updateTopicDraft("title", event.target.value); }} className="w-full rounded-xl border border-white/10 bg-[#09131f] px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/40" placeholder="主題名稱，例如：程式設計" />
+              <input value={topicDraft.primarySkill} onChange={function (event) { updateTopicDraft("primarySkill", event.target.value); }} className="w-full rounded-xl border border-white/10 bg-[#09131f] px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/40" placeholder="核心技能，例如：React 基礎" />
+              <input value={topicDraft.skillsText} onChange={function (event) { updateTopicDraft("skillsText", event.target.value); }} className="w-full rounded-xl border border-white/10 bg-[#09131f] px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/40" placeholder="技能清單，逗號分隔" />
+              <textarea value={topicDraft.goal} onChange={function (event) { updateTopicDraft("goal", event.target.value); }} rows={3} className="w-full resize-none rounded-xl border border-white/10 bg-[#09131f] px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/40" placeholder="主題目標，例如：能獨立做出作品" />
+              <button onClick={addCustomTopic} className="w-full rounded-xl bg-cyan-400 px-4 py-2 font-bold text-slate-950 transition hover:bg-cyan-300">
+                建立新主題
+              </button>
+            </div>
+          </Panel>
         </aside>
 
         <section className="space-y-5">
-          <Panel title="今日 Quest" icon={BookOpenCheck}>
-            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
-              <p className="text-sm font-bold text-amber-900">目前主線：{currentStory.title}</p>
-              <p className="mt-1 text-sm leading-6 text-amber-900">技能：{currentStory.skills.join(" / ")}</p>
+          <Panel title={currentStory.title + " 任務面板"} icon={BookOpenCheck}>
+            <div className="mb-4 rounded-xl border border-cyan-400/15 bg-cyan-400/5 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-cyan-200">主題技能</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-300">{currentStory.skills.join(" / ")}</p>
+                </div>
+                <span className="rounded-full border border-cyan-400/20 bg-[#0b1525] px-3 py-1 text-sm text-cyan-200">
+                  {activeStatus}
+                </span>
+              </div>
             </div>
 
-            <section>
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-lg font-black">今日必修任務</h3>
-                <span className="text-sm font-bold text-amber-700">先完成才解鎖其他主題</span>
-              </div>
-              {gateQuest ? (
-                <QuestCard
-                  quest={gateQuest}
-                  kindLabel="每日首題"
-                  done={dailyState.submittedQuestIds.includes(gateQuest.id)}
-                  started={dailyState.startedQuestIds.includes(gateQuest.id)}
-                  secondsLeft={dailyState.timeLeft[gateQuest.id] ?? gateQuest.seconds}
-                  answer={dailyState.answers[gateQuest.id] || ""}
-                  result={dailyState.results[gateQuest.id]}
-                  onStart={startQuest}
-                  onAnswer={updateAnswer}
-                  onSubmit={submitQuest}
-                />
-              ) : (
-                <FallbackCard title="今日必修任務尚未生成" body="分析師題庫目前沒有可用的首題，請先補充 analyst 的 daily_gate 題目。" />
-              )}
-            </section>
+            {activeStory === "analyst" ? (
+              <div className="space-y-5">
+                <section>
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-lg font-black text-white">今日必修首題</h3>
+                    <span className="text-sm text-cyan-200">完成後才會解鎖其他主題</span>
+                  </div>
+                  {gateQuest ? (
+                    <QuestCard
+                      quest={gateQuest}
+                      kindLabel="Gate Quest"
+                      done={currentDailyState.completedQuestIds.includes(gateQuest.id)}
+                      started={currentDailyState.startedQuestIds.includes(gateQuest.id)}
+                      secondsLeft={currentDailyState.timeLeft[gateQuest.id] ?? 0}
+                      answer={currentDailyState.answers[gateQuest.id] || ""}
+                      result={currentDailyState.results[gateQuest.id]}
+                      timerMode={learningSettings.timerMode}
+                      onStart={startQuest}
+                      onAnswer={updateAnswer}
+                      onSubmit={submitQuest}
+                    />
+                  ) : (
+                    <FallbackCard title="今天沒有可用的分析師首題" body="目前題庫無法生成 gate 題，請檢查 analyst pool。" />
+                  )}
+                </section>
 
-            <section className="pt-2">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-lg font-black">已解鎖任務</h3>
-                <span className="text-sm text-slate-500">{gateCompleted ? "已開放所有其他主題" : "完成今日分析師任務後解鎖"}</span>
+                <section>
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-lg font-black text-white">分析師主題任務</h3>
+                    <span className="text-sm text-slate-400">{gateCompleted ? "依設定生成今日主題題目" : "先完成首題再開放練習題"}</span>
+                  </div>
+                  {gateCompleted ? (
+                    <div className="space-y-4">
+                      {activeTopicQuests.map(function (quest) {
+                        return (
+                          <QuestCard
+                            key={quest.id}
+                            quest={quest}
+                            kindLabel="Analyst Quest"
+                            done={currentDailyState.completedQuestIds.includes(quest.id)}
+                            started={currentDailyState.startedQuestIds.includes(quest.id)}
+                            secondsLeft={currentDailyState.timeLeft[quest.id] ?? 0}
+                            answer={currentDailyState.answers[quest.id] || ""}
+                            result={currentDailyState.results[quest.id]}
+                            timerMode={learningSettings.timerMode}
+                            onStart={startQuest}
+                            onAnswer={updateAnswer}
+                            onSubmit={submitQuest}
+                          />
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <FallbackCard title="分析師主題練習尚未解鎖" body="先完成今日分析師首題，系統才會開放當日分析師練習題與其他主題。" />
+                  )}
+                </section>
               </div>
-              {gateCompleted ? (
-                <div className="space-y-4">
-                  {unlockedQuests.map(function (quest) {
-                    return (
-                      <QuestCard
-                        key={quest.id}
-                        quest={quest}
-                        kindLabel="已解鎖任務"
-                        done={dailyState.submittedQuestIds.includes(quest.id)}
-                        started={dailyState.startedQuestIds.includes(quest.id)}
-                        secondsLeft={dailyState.timeLeft[quest.id] ?? quest.seconds}
-                        answer={dailyState.answers[quest.id] || ""}
-                        result={dailyState.results[quest.id]}
-                        onStart={startQuest}
-                        onAnswer={updateAnswer}
-                        onSubmit={submitQuest}
-                      />
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="grid gap-3 md:grid-cols-3">
-                  {OTHER_TOPICS.map(function (topicId) {
-                    return <LockedTopicCard key={topicId} story={TOPIC_META[topicId]} progress={progressByTopic[topicId]} />;
-                  })}
-                </div>
-              )}
-            </section>
+            ) : gateCompleted ? (
+              <div className="space-y-4">
+                {activeTopicQuests.map(function (quest) {
+                  return (
+                    <QuestCard
+                      key={quest.id}
+                      quest={quest}
+                      kindLabel={currentStory.title}
+                      done={currentDailyState.completedQuestIds.includes(quest.id)}
+                      started={currentDailyState.startedQuestIds.includes(quest.id)}
+                      secondsLeft={currentDailyState.timeLeft[quest.id] ?? 0}
+                      answer={currentDailyState.answers[quest.id] || ""}
+                      result={currentDailyState.results[quest.id]}
+                      timerMode={learningSettings.timerMode}
+                      onStart={startQuest}
+                      onAnswer={updateAnswer}
+                      onSubmit={submitQuest}
+                    />
+                  );
+                })}
+              </div>
+            ) : (
+              <FallbackCard
+                title={currentStory.title + " 目前鎖定"}
+                body="先完成今日分析師首題，這個主題才會顯示對應題目。切換主題只會顯示該主題自己的任務。"
+              />
+            )}
           </Panel>
 
-          <Panel title="提交驗收" icon={ClipboardCheck}>
+          <Panel title="驗收與提示" icon={ClipboardCheck}>
             <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-start">
-              <div className="rounded-lg border border-slate-200 bg-white p-4">
-                <p className="font-bold">AI 教授模式</p>
-                <p className="mt-2 min-h-14 text-sm leading-6 text-slate-600">{dailyState.reviewMessage}</p>
+              <div className="rounded-xl border border-white/8 bg-[#0b1525] p-4">
+                <p className="font-bold text-white">混合驗收模式</p>
+                <p className="mt-2 min-h-16 text-sm leading-6 text-slate-300">{currentDailyState.reviewMessage}</p>
               </div>
-              <button onClick={showHint} disabled={!focusedQuest} className="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-3 font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600">
-                <Lightbulb size={18} /> 給提示
+              <button
+                onClick={showHint}
+                disabled={!currentDailyState.focusQuestId}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 py-3 font-bold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+              >
+                <Lightbulb size={18} /> 顯示提示
               </button>
             </div>
-            {focusedQuest && dailyState.hintLevel > 0 ? (
+            {currentDailyState.focusQuestId && currentDailyState.hintLevel > 0 ? (
               <div className="mt-4 space-y-2">
-                {focusedQuest.hints.slice(0, dailyState.hintLevel).map(function (hint) {
+                {visibleHints.slice(0, currentDailyState.hintLevel).map(function (hint) {
                   return (
-                    <p key={hint} className="rounded-md bg-slate-100 p-3 text-sm leading-6 text-slate-700">
+                    <p key={hint} className="rounded-xl border border-cyan-400/10 bg-cyan-400/5 p-3 text-sm leading-6 text-slate-200">
                       {hint}
                     </p>
                   );
@@ -449,44 +573,72 @@ function App() {
         </section>
 
         <aside className="space-y-5">
-          <Panel title="每週 Boss" icon={Swords}>
-            <div className="rounded-lg border border-rose-200 bg-[#fff7f4] p-4">
-              <p className="text-sm font-bold text-rose-700">本週主題：財報</p>
-              <h3 className="mt-1 text-2xl font-black">台積電季度財報</h3>
-              <div className="mt-4 flex items-center justify-between text-sm font-bold">
+          <Panel title="學習設定" icon={Settings2}>
+            <div className="space-y-5">
+              <SettingGroup
+                title="每日任務量"
+                value={learningSettings.dailyLoad}
+                options={SETTINGS_OPTIONS.dailyLoad}
+                onChange={function (value) { updateSetting("dailyLoad", value); }}
+              />
+              <SettingGroup
+                title="驗收模式"
+                value={learningSettings.reviewMode}
+                options={SETTINGS_OPTIONS.reviewMode}
+                onChange={function (value) { updateSetting("reviewMode", value); }}
+              />
+              <SettingGroup
+                title="計時方式"
+                value={learningSettings.timerMode}
+                options={SETTINGS_OPTIONS.timerMode}
+                onChange={function (value) { updateSetting("timerMode", value); }}
+              />
+              <SettingGroup
+                title="提示節奏"
+                value={learningSettings.hintMode}
+                options={SETTINGS_OPTIONS.hintMode}
+                onChange={function (value) { updateSetting("hintMode", value); }}
+              />
+              <button onClick={resetDay} className="w-full rounded-xl border border-white/10 bg-[#0b1525] px-4 py-3 font-bold text-slate-200 transition hover:border-cyan-400/30 hover:text-white">
+                依目前設定重建今日任務
+              </button>
+            </div>
+          </Panel>
+
+          <Panel title="當前 Boss" icon={Swords}>
+            <div className="rounded-xl border border-white/8 bg-[#0b1525] p-4">
+              <p className="text-sm font-bold text-slate-400">{currentStory.title}</p>
+              <h3 className="mt-1 text-2xl font-black text-white">{currentStory.bossTitle}</h3>
+              <div className="mt-4 flex items-center justify-between text-sm font-bold text-slate-300">
                 <span>理解阻力</span>
-                <span>{dailyState.bossHp}/100 HP</span>
+                <span>{currentDailyState.bossHp}/100 HP</span>
               </div>
-              <div className="mt-2 h-3 overflow-hidden rounded-full bg-rose-100">
-                <div className="h-full rounded-full bg-rose-600 transition-all" style={{ width: dailyState.bossHp + "%" }} />
+              <div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-800">
+                <div className="h-full rounded-full bg-cyan-400 transition-all" style={{ width: currentDailyState.bossHp + "%" }} />
               </div>
-              <ul className="mt-4 space-y-2 text-sm leading-6 text-slate-700">
-                <li>營收來源？</li>
-                <li>毛利率變化？</li>
-                <li>最大風險？</li>
-                <li>你的結論？</li>
+              <ul className="mt-4 space-y-2 text-sm leading-6 text-slate-300">
+                {activeBoss.map(function (item) {
+                  return <li key={item}>{item}</li>;
+                })}
               </ul>
             </div>
           </Panel>
 
           <Panel title="每月 Project" icon={Trophy}>
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <p className="text-sm font-bold text-slate-500">七月作品</p>
-              <h3 className="mt-1 text-xl font-black">半導體產業研究報告</h3>
+            <div className="rounded-xl border border-white/8 bg-[#0b1525] p-4">
+              <p className="text-sm font-bold text-slate-400">本月作品</p>
+              <h3 className="mt-1 text-xl font-black text-white">{currentStory.projectTitle}</h3>
               <div className="mt-4 space-y-2">
-                {["產業鏈", "上下游", "成長動能", "風險", "投資想法"].map(function (item, index) {
+                {activeProject.map(function (item, index) {
                   return (
-                    <div key={item} className="flex items-center gap-2 text-sm">
-                      <CheckCircle2 className={index < completedCount ? "text-emerald-600" : "text-slate-300"} size={17} />
+                    <div key={item} className="flex items-center gap-2 text-sm text-slate-300">
+                      <CheckCircle2 className={index < currentDailyState.completedQuestIds.length ? "text-cyan-300" : "text-slate-600"} size={17} />
                       {item}
                     </div>
                   );
                 })}
               </div>
             </div>
-            <button onClick={resetDay} className="mt-4 w-full rounded-md border border-slate-300 bg-white px-4 py-3 font-bold text-slate-700 transition hover:border-slate-500">
-              重置今日進度
-            </button>
           </Panel>
         </aside>
       </section>
@@ -495,28 +647,28 @@ function App() {
 }
 
 function QuestCard(props) {
-  const { quest, kindLabel, done, started, secondsLeft, answer, result, onStart, onAnswer, onSubmit } = props;
-  const expired = secondsLeft === 0 && !done;
+  const { quest, kindLabel, done, started, secondsLeft, answer, result, timerMode, onStart, onAnswer, onSubmit } = props;
+  const expired = timerMode !== "off" && secondsLeft === 0 && started && !done;
   return (
-    <article className={"rounded-lg border p-4 " + (done ? "border-emerald-400 bg-emerald-50" : "border-slate-200 bg-white")}>
+    <article className={"rounded-2xl border p-4 " + (done ? "border-emerald-400/30 bg-emerald-400/5" : "border-white/8 bg-[#0b1525]")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-bold text-slate-500">
+          <p className="text-sm font-bold text-slate-400">
             {kindLabel} / {quest.track}
           </p>
-          <h3 className="mt-1 text-2xl font-black">{quest.title}</h3>
-          <p className="mt-1 text-sm text-slate-500">{Math.ceil(quest.seconds / 60)} 分鐘測驗 / Lv.{quest.minLevel}-{quest.maxLevel}</p>
+          <h3 className="mt-1 text-2xl font-black text-white">{quest.title}</h3>
+          <p className="mt-1 text-sm text-slate-400">約 {Math.ceil(quest.seconds / 60)} 分鐘 / Lv.{quest.minLevel}</p>
         </div>
-        <span className="rounded-md bg-[#f1b84b] px-3 py-1 text-sm font-black text-slate-900">+{quest.exp} EXP</span>
+        <span className="rounded-full bg-cyan-400/15 px-3 py-1 text-sm font-black text-cyan-200">+{quest.exp} EXP</span>
       </div>
 
-      <div className="mt-4 rounded-md bg-cyan-50 p-4">
-        <p className="font-bold text-cyan-950">{quest.materialTitle}</p>
-        <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-700">
+      <div className="mt-4 rounded-xl border border-cyan-400/10 bg-cyan-400/5 p-4">
+        <p className="font-bold text-cyan-200">{quest.materialTitle}</p>
+        <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-300">
           {quest.materials.map(function (item) {
             return (
               <li key={item} className="flex gap-2">
-                <ChevronRight className="mt-1 shrink-0 text-cyan-700" size={15} />
+                <ChevronRight className="mt-1 shrink-0 text-cyan-300" size={15} />
                 {item}
               </li>
             );
@@ -524,40 +676,56 @@ function QuestCard(props) {
         </ul>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
-        <div className="inline-flex items-center gap-2 font-bold text-slate-700">
-          <Timer size={18} /> {formatTime(secondsLeft)} {expired ? <span className="text-rose-700">已超時</span> : null}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/8 bg-[#09131f] p-3">
+        <div className="inline-flex items-center gap-2 font-bold text-slate-300">
+          <Timer size={18} />
+          {timerMode === "off" ? "自由作答" : formatTime(secondsLeft)}
+          {expired ? <span className="text-rose-300">已超時</span> : null}
         </div>
-        <button onClick={function () { onStart(quest); }} disabled={started || done} className="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2 font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600">
-          <Play size={17} /> {started ? "測驗進行中" : done ? "已完成" : "開始測驗"}
+        <button
+          onClick={function () { onStart(quest); }}
+          disabled={started || done}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 py-2 font-bold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+        >
+          <Play size={17} /> {started ? "進行中" : done ? "已完成" : "開始測驗"}
         </button>
       </div>
 
       {result ? <ReviewBadge result={result} /> : null}
 
-      {started ? (
+      {started || timerMode === "off" ? (
         <div className="mt-4">
-          <div className="rounded-md bg-slate-50 p-3">
-            <p className="text-sm font-bold">測驗題目</p>
-            <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-700">
+          <div className="rounded-xl border border-white/8 bg-[#09131f] p-3">
+            <p className="text-sm font-bold text-white">測驗題目</p>
+            <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-300">
               {quest.questions.map(function (question) {
                 return (
                   <li key={question} className="flex gap-2">
-                    <ChevronRight className="mt-1 shrink-0" size={15} />
+                    <ChevronRight className="mt-1 shrink-0 text-slate-400" size={15} />
                     {question}
                   </li>
                 );
               })}
             </ul>
           </div>
-          <label className="mt-4 block text-sm font-bold" htmlFor={quest.id}>
+          <label className="mt-4 block text-sm font-bold text-white" htmlFor={quest.id}>
             你的答案
           </label>
-          <textarea id={quest.id} value={answer} onChange={function (event) { onAnswer(quest.id, event.target.value); }} rows={5} className="mt-2 w-full resize-none rounded-md border border-slate-300 bg-white p-3 text-sm leading-6 outline-none transition focus:border-cyan-600" placeholder={quest.clear} />
+          <textarea
+            id={quest.id}
+            value={answer}
+            onChange={function (event) { onAnswer(quest.id, event.target.value); }}
+            rows={5}
+            className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-[#09131f] p-3 text-sm leading-6 text-white outline-none transition focus:border-cyan-400/40"
+            placeholder={quest.clear}
+          />
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-slate-500">完成條件：{quest.clear}</p>
-            <button onClick={function () { onSubmit(quest); }} className={"inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 font-bold transition " + (done ? "bg-emerald-700 text-white" : "bg-slate-950 text-white hover:bg-slate-800")}>
-              <NotebookPen size={17} /> {done ? "已提交" : "提交驗收"}
+            <p className="text-sm text-slate-400">完成條件：{quest.clear}</p>
+            <button
+              onClick={function () { onSubmit(quest); }}
+              className={"inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-bold transition " + (done ? "bg-emerald-500 text-slate-950" : "bg-white text-slate-950 hover:bg-cyan-50")}
+            >
+              <NotebookPen size={17} /> {done ? "再次補答" : "提交驗收"}
             </button>
           </div>
         </div>
@@ -570,59 +738,19 @@ function ReviewBadge(props) {
   const { result } = props;
   const palette =
     result.status === "pass"
-      ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+      ? "border-emerald-400/25 bg-emerald-400/5 text-emerald-100"
       : result.status === "reinforce"
-        ? "border-amber-300 bg-amber-50 text-amber-900"
-        : "border-rose-300 bg-rose-50 text-rose-900";
+        ? "border-amber-400/25 bg-amber-400/5 text-amber-100"
+        : "border-rose-400/25 bg-rose-400/5 text-rose-100";
   return (
-    <div className={"mt-4 rounded-md border p-3 text-sm leading-6 " + palette}>
+    <div className={"mt-4 rounded-xl border p-3 text-sm leading-6 " + palette}>
       <p className="font-bold">{result.label}</p>
       <p className="mt-1">{result.message}</p>
-      {result.missingConcepts?.length ? (
-        <p className="mt-2">
-          需要補強：{result.missingConcepts.join("、")}
-        </p>
-      ) : null}
+      {result.hitConcepts?.length ? <p className="mt-2">已命中：{result.hitConcepts.join("、")}</p> : null}
+      {result.missingConcepts?.length ? <p className="mt-2">需要補強：{result.missingConcepts.join("、")}</p> : null}
       {result.followUpQuestion ? <p className="mt-2 font-bold">追問：{result.followUpQuestion}</p> : null}
+      {result.coachMessage ? <p className="mt-2">教練建議：{result.coachMessage}</p> : null}
       <p className="mt-2 font-bold">本次獲得：{result.awardedExp} EXP</p>
-    </div>
-  );
-}
-
-function LockedTopicCard(props) {
-  const { story, progress } = props;
-  return (
-    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4">
-      <div className="flex items-center gap-2">
-        <span className="grid h-8 w-8 place-items-center rounded-md bg-slate-200 text-slate-500">
-          <Lock size={16} />
-        </span>
-        <div>
-          <p className="font-bold">{story.title}</p>
-          <p className="text-xs text-slate-500">Lv.{progress.level} / 完成今日分析師任務後解鎖</p>
-        </div>
-      </div>
-      <p className="mt-3 text-sm leading-6 text-slate-600">{story.goal}</p>
-    </div>
-  );
-}
-
-function FallbackCard(props) {
-  const { title, body } = props;
-  return (
-    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4">
-      <p className="font-bold">{title}</p>
-      <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>
-    </div>
-  );
-}
-
-function Metric(props) {
-  const { label, value } = props;
-  return (
-    <div className="rounded-lg border border-white/10 bg-white/10 p-3">
-      <p className="text-xs text-slate-300">{label}</p>
-      <p className="mt-1 text-xl font-black">{value}</p>
     </div>
   );
 }
@@ -630,32 +758,90 @@ function Metric(props) {
 function Panel(props) {
   const { title, icon: Icon, children } = props;
   return (
-    <article className="rounded-lg border border-slate-200 bg-white/80 p-4 shadow-sm">
+    <article className="rounded-2xl border border-white/8 bg-[#08111d] p-4 shadow-[0_20px_60px_rgba(2,12,27,0.35)]">
       <div className="mb-4 flex items-center gap-2">
-        <span className="grid h-9 w-9 place-items-center rounded-md bg-slate-950 text-white">
+        <span className="grid h-9 w-9 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300">
           <Icon size={19} />
         </span>
-        <h2 className="text-xl font-black">{title}</h2>
+        <h2 className="text-xl font-black text-white">{title}</h2>
       </div>
       {children}
     </article>
   );
 }
 
-function loadInitialState() {
-  const progressByTopic = normalizeProgress(readStoredState()?.progressByTopic || DEFAULT_PROGRESS);
-  const activeStory = readStoredState()?.activeStory || "analyst";
-  const storedDailyState = readStoredState()?.dailyState;
-  const dateKey = getDateKey();
-  const dailyState =
-    storedDailyState && storedDailyState.dateKey === dateKey
-      ? normalizeDailyState(storedDailyState, progressByTopic)
-      : createDailyState(progressByTopic, dateKey);
+function Metric(props) {
+  const { label, value } = props;
+  return (
+    <div className="rounded-xl border border-white/8 bg-[#09131f] p-3">
+      <p className="text-xs text-slate-400">{label}</p>
+      <p className="mt-1 text-xl font-black text-white">{value}</p>
+    </div>
+  );
+}
 
+function FallbackCard(props) {
+  const { title, body } = props;
+  return (
+    <div className="rounded-2xl border border-dashed border-white/12 bg-[#0b1525] p-4">
+      <p className="font-bold text-white">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-slate-300">{body}</p>
+    </div>
+  );
+}
+
+function SettingGroup(props) {
+  const { title, value, options, onChange } = props;
+  return (
+    <div>
+      <p className="mb-2 text-sm font-bold text-white">{title}</p>
+      <div className="space-y-2">
+        {options.map(function (option) {
+          const active = option.id === value;
+          return (
+            <button
+              key={option.id}
+              onClick={function () { onChange(option.id); }}
+              className={
+                "w-full rounded-xl border px-3 py-3 text-left transition " +
+                (active
+                  ? "border-cyan-400/40 bg-cyan-400/10 text-white"
+                  : "border-white/8 bg-[#09131f] text-slate-300 hover:border-cyan-400/20")
+              }
+            >
+              <p className="font-bold">{option.label}</p>
+              <p className="mt-1 text-xs text-slate-400">{option.description}</p>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function loadInitialState() {
+  const stored = readStoredState();
   return {
-    activeStory,
-    progressByTopic,
-    dailyState,
+    activeStory: stored?.activeStory || "analyst",
+    customTopics: Array.isArray(stored?.customTopics) ? stored.customTopics : [],
+    learningSettings: { ...DEFAULT_SETTINGS, ...(stored?.learningSettings || {}) },
+    progressByTopic: stored?.progressByTopic || {},
+    dailyState: stored?.dailyState || {
+      dateKey: "",
+      gateQuestId: null,
+      topicQuestIds: {},
+      unlockedTopics: [],
+      completedQuestIds: [],
+      startedQuestIds: [],
+      answers: {},
+      timeLeft: {},
+      awardedExp: {},
+      results: {},
+      hintLevel: 0,
+      focusQuestId: null,
+      reviewMessage: "先完成今日分析師首題，再展開其他主題。",
+      bossHp: BOSS_START_HP,
+    },
   };
 }
 
@@ -678,55 +864,45 @@ function saveAppState(state) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-function createDailyState(progressByTopic, dateKey) {
-  const gateQuest = pickQuest(QUEST_POOLS.analyst, {
-    type: "daily_gate",
-    topic: "analyst",
-    level: progressByTopic.analyst.level,
-    dateKey,
+function normalizeProgress(progressByTopic, defaults, topicOrder, topicMeta) {
+  const next = {};
+  topicOrder.forEach(function (topicId) {
+    const base = defaults[topicId];
+    const current = progressByTopic?.[topicId] || base;
+    next[topicId] = {
+      level: typeof current.level === "number" ? current.level : base.level,
+      exp: typeof current.exp === "number" ? current.exp : base.exp,
+      maxExp: typeof current.maxExp === "number" ? current.maxExp : getNextThreshold(topicMeta[topicId], current.level || base.level),
+    };
   });
-  const topicQuestIds = {};
-  OTHER_TOPICS.forEach(function (topic) {
-    const quest = pickQuest(QUEST_POOLS[topic], {
-      type: "standard",
-      topic,
-      level: progressByTopic[topic].level,
-      dateKey,
-    });
-    if (quest) {
-      topicQuestIds[topic] = quest.id;
-    }
-  });
-
-  return {
-    dateKey,
-    gateQuestId: gateQuest ? gateQuest.id : null,
-    topicQuestIds,
-    unlockedTopics: [],
-    submittedQuestIds: [],
-    startedQuestIds: [],
-    answers: {},
-    timeLeft: {},
-    awardedExp: {},
-    results: {},
-    hintLevel: 0,
-    focusQuestId: gateQuest ? gateQuest.id : null,
-    reviewMessage: "今天先完成分析師之路的必修任務。完成後才會解鎖其他主題。",
-    bossHp: BOSS_START_HP,
-  };
+  return next;
 }
 
-function normalizeDailyState(dailyState, progressByTopic) {
-  const rebuilt = createDailyState(progressByTopic, dailyState.dateKey);
+function syncDailyState(dailyState, progressByTopic, questPools, topicOrder, settings) {
+  const dateKey = getDateKey();
+  if (!dailyState?.dateKey || dailyState.dateKey !== dateKey) {
+    return createDailyState(progressByTopic, dateKey, questPools, topicOrder, settings);
+  }
+  const rebuilt = createDailyState(progressByTopic, dateKey, questPools, topicOrder, settings);
+  const normalizedTopicQuestIds = {};
+  topicOrder.forEach(function (topicId) {
+    const current = dailyState.topicQuestIds?.[topicId];
+    normalizedTopicQuestIds[topicId] = Array.isArray(current)
+      ? current
+      : current
+        ? [current]
+        : rebuilt.topicQuestIds[topicId] || [];
+  });
   return {
     ...rebuilt,
     ...dailyState,
-    topicQuestIds: {
-      ...rebuilt.topicQuestIds,
-      ...dailyState.topicQuestIds,
-    },
+    gateQuestId: dailyState.gateQuestId || rebuilt.gateQuestId,
+    focusQuestId: dailyState.focusQuestId || rebuilt.focusQuestId,
+    topicQuestIds: normalizedTopicQuestIds,
     unlockedTopics: Array.isArray(dailyState.unlockedTopics) ? dailyState.unlockedTopics : [],
-    submittedQuestIds: Array.isArray(dailyState.submittedQuestIds) ? dailyState.submittedQuestIds : [],
+    completedQuestIds: Array.isArray(dailyState.completedQuestIds || dailyState.submittedQuestIds)
+      ? (dailyState.completedQuestIds || dailyState.submittedQuestIds)
+      : [],
     startedQuestIds: Array.isArray(dailyState.startedQuestIds) ? dailyState.startedQuestIds : [],
     answers: dailyState.answers || {},
     timeLeft: dailyState.timeLeft || {},
@@ -735,31 +911,63 @@ function normalizeDailyState(dailyState, progressByTopic) {
   };
 }
 
-function normalizeProgress(progressByTopic) {
-  const next = {};
-  TOPIC_ORDER.forEach(function (topic) {
-    const current = progressByTopic[topic] || DEFAULT_PROGRESS[topic];
-    next[topic] = {
-      level: current.level,
-      exp: current.exp,
-      maxExp: current.maxExp || getNextThreshold(topic, current.level),
-    };
+function createDailyState(progressByTopic, dateKey, questPools, topicOrder, settings) {
+  const loadCount = getDailyLoadCount(settings);
+  const analystGate = pickQuest(questPools.analyst, {
+    level: progressByTopic.analyst.level,
+    dateKey,
+    seedScope: "analyst-gate",
+    excludeIds: [],
   });
-  return next;
+  const topicQuestIds = {};
+  topicOrder.forEach(function (topicId) {
+    const pool = questPools[topicId] || [];
+    if (!pool.length) {
+      topicQuestIds[topicId] = [];
+      return;
+    }
+    const excludeIds = topicId === "analyst" && analystGate ? [analystGate.id] : [];
+    topicQuestIds[topicId] = pickQuestSet(pool, {
+      level: progressByTopic[topicId].level,
+      dateKey,
+      seedScope: topicId + "-daily",
+      count: loadCount,
+      excludeIds,
+    }).map(function (quest) {
+      return quest.id;
+    });
+  });
+  return {
+    dateKey,
+    gateQuestId: analystGate ? analystGate.id : null,
+    topicQuestIds,
+    unlockedTopics: [],
+    completedQuestIds: [],
+    startedQuestIds: [],
+    answers: {},
+    timeLeft: {},
+    awardedExp: {},
+    results: {},
+    hintLevel: 0,
+    focusQuestId: analystGate ? analystGate.id : topicQuestIds.analyst?.[0] || null,
+    reviewMessage: "今天先完成分析師之路的首題。完成後，切到其他主題就只會看到該主題自己的任務。",
+    bossHp: BOSS_START_HP,
+  };
 }
 
 function pickQuest(pool, options) {
-  const { type, topic, level, dateKey } = options;
-  const typeMatches = pool.filter(function (quest) {
-    return quest.type === type;
-  });
-  let candidates = typeMatches.filter(function (quest) {
-    return level >= quest.minLevel && level <= quest.maxLevel;
-  });
+  return pickQuestSet(pool, { ...options, count: 1 })[0] || null;
+}
 
+function pickQuestSet(pool, options) {
+  const { level, dateKey, seedScope, count, excludeIds } = options;
+  const excluded = new Set(excludeIds || []);
+  let candidates = pool.filter(function (quest) {
+    return quest.minLevel <= level && quest.maxLevel >= level && !excluded.has(quest.id);
+  });
   if (!candidates.length) {
-    const lowerMatches = typeMatches.filter(function (quest) {
-      return quest.minLevel <= level;
+    const lowerMatches = pool.filter(function (quest) {
+      return quest.minLevel <= level && !excluded.has(quest.id);
     });
     if (lowerMatches.length) {
       const highestMinLevel = Math.max.apply(
@@ -773,44 +981,37 @@ function pickQuest(pool, options) {
       });
     }
   }
-
   if (!candidates.length) {
-    candidates = typeMatches;
+    candidates = pool.filter(function (quest) { return !excluded.has(quest.id); });
   }
-
   if (!candidates.length) {
-    return null;
+    return [];
   }
-
-  const seed = hashString(dateKey + ":" + topic + ":" + type + ":" + level);
-  return candidates[seed % candidates.length];
+  const decorated = candidates.map(function (quest) {
+    return {
+      quest,
+      order: hashString(dateKey + ":" + seedScope + ":" + quest.id),
+    };
+  });
+  decorated.sort(function (left, right) {
+    return left.order - right.order;
+  });
+  return decorated.slice(0, count).map(function (item) {
+    return item.quest;
+  });
 }
 
-function hashString(value) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash +=
-      (hash << 1) +
-      (hash << 4) +
-      (hash << 7) +
-      (hash << 8) +
-      (hash << 24);
-  }
-  return Math.abs(hash >>> 0);
-}
-
-function evaluateAnswer(answer, quest) {
+function evaluateAnswer(answer, quest, settings) {
   const plain = answer.replace(/\s+/g, " ").trim();
   const sentenceCount = plain.split(/[。！？!?]/).filter(Boolean).length;
-  const minFailLength = Math.max(45, quest.questions.length * 18);
-  const passLength = Math.max(150, quest.questions.length * 48);
+  const thresholds = getThresholdPreset(settings, quest);
   const rubricChecks = Array.isArray(quest.rubric) ? quest.rubric : [];
   const matchedConcepts = rubricChecks.filter(function (item) {
     return item.keywords.some(function (keyword) {
-      return plain.toLowerCase().includes(keyword.toLowerCase());
+      return plain.toLowerCase().includes(String(keyword).toLowerCase());
     });
   });
+  const hitConcepts = matchedConcepts.map(function (item) { return item.concept; });
   const missingConcepts = rubricChecks
     .filter(function (item) {
       return !matchedConcepts.includes(item);
@@ -819,34 +1020,43 @@ function evaluateAnswer(answer, quest) {
       return item.concept;
     });
   const coverageRate = rubricChecks.length ? matchedConcepts.length / rubricChecks.length : 1;
-  const followUpQuestion = missingConcepts.length ? "請補充：" + missingConcepts[0] + "，並說明你的理由。" : "";
+  const followUpQuestion = missingConcepts.length
+    ? rubricChecks.find(function (item) { return item.concept === missingConcepts[0]; })?.followUp || "請把缺漏概念補完整。"
+    : "";
+  const coachMessage = missingConcepts.length
+    ? rubricChecks.find(function (item) { return item.concept === missingConcepts[0]; })?.coachNote || "先補清楚概念，再補一個例子。"
+    : "你的回答已經有完整主軸，可以繼續往下推進。";
 
-  if (plain.length < minFailLength || sentenceCount < Math.max(2, quest.questions.length - 1)) {
+  if (plain.length < thresholds.minFailLength || sentenceCount < Math.max(2, quest.questions.length - 1)) {
     return {
       status: "fail",
       label: "未達標",
       awardedExp: 0,
       message: "回答太短或不夠完整。請至少逐題作答，用自己的話把邏輯講清楚。",
+      hitConcepts,
       missingConcepts,
       followUpQuestion,
+      coachMessage,
     };
   }
 
-  if (plain.length < passLength || coverageRate < 0.75) {
+  if (plain.length < thresholds.passLength || coverageRate < thresholds.passCoverage) {
     return {
       status: "reinforce",
       label: "通過但需補強",
       awardedExp: Math.round(quest.exp * 0.7),
       message:
-        coverageRate < 0.75
-          ? "你有抓到部分方向，但還漏掉幾個核心概念。先把缺的點補齊，再讓答案更完整。"
-          : "核心方向對了，但推理還不夠扎實。請再補一句為什麼，讓答案更像你自己的理解。",
+        coverageRate < thresholds.passCoverage
+          ? "你有抓到方向，但核心概念還沒覆蓋完整。先補缺漏點，再讓答案更完整。"
+          : "方向正確，但說明還不夠扎實。請把原因和例子補清楚。",
       reviewAfterPass:
-        quest.type === "daily_gate"
-          ? "分析師首題已通過，但還需要補強。其他主題已先解鎖，建議今天再回來把這題講得更完整。"
-          : "這題已通過，但表達還可以更精準。進度已記錄，你可以先繼續下一題。",
+        quest.topic === "analyst"
+          ? "分析師首題已通過，但還建議補強。其他主題已解鎖，你可以先切過去，也可以先把這題補完整。"
+          : "這題先通過，但還有補強空間。系統已記錄進度，你可以稍後再來升級答案。",
+      hitConcepts,
       missingConcepts,
       followUpQuestion,
+      coachMessage,
     };
   }
 
@@ -856,15 +1066,17 @@ function evaluateAnswer(answer, quest) {
     awardedExp: quest.exp,
     message: "回答已達到通過標準。你有把主要概念講清楚，而且能用自己的語言整理重點。",
     reviewAfterPass:
-      quest.type === "daily_gate"
-        ? "分析師首題已通過，其他主題任務已解鎖。接下來可以從英文、交易系統或個人成長裡挑一題繼續。"
-        : "任務已通過驗收，EXP 已發放。你可以繼續今天的其他已解鎖任務。",
+      quest.topic === "analyst"
+        ? "分析師首題已通過。現在切到其他主題，只會看到各自主題對應的任務。"
+        : "任務已通過驗收，EXP 已發放。你可以繼續這個主題的其他題目，或切去別的主題。",
+    hitConcepts,
     missingConcepts,
     followUpQuestion,
+    coachMessage,
   };
 }
 
-function applyQuestReward(progressByTopic, topic, awardedExp) {
+function applyQuestReward(progressByTopic, topic, awardedExp, topicMeta) {
   const current = progressByTopic[topic];
   let nextLevel = current.level;
   let nextExp = current.exp + awardedExp;
@@ -873,7 +1085,7 @@ function applyQuestReward(progressByTopic, topic, awardedExp) {
   while (nextExp >= nextMaxExp) {
     nextExp -= nextMaxExp;
     nextLevel += 1;
-    nextMaxExp = getNextThreshold(topic, nextLevel);
+    nextMaxExp = getNextThreshold(topicMeta[topic], nextLevel);
   }
 
   return {
@@ -886,13 +1098,8 @@ function applyQuestReward(progressByTopic, topic, awardedExp) {
   };
 }
 
-function getNextThreshold(topic, level) {
-  const config = TOPIC_META[topic];
-  return config.baseMaxExp + level * config.expStep;
-}
-
-function deriveTopicStatus(topic, progress, gateCompleted) {
-  if (topic !== "analyst" && !gateCompleted && progress.level === 0 && progress.exp === 0) {
+function deriveTopicStatus(topicId, progress, gateCompleted) {
+  if (topicId !== "analyst" && !gateCompleted && progress.level === 0 && progress.exp === 0) {
     return "鎖定";
   }
   if (progress.level === 0 && progress.exp === 0) {
@@ -902,6 +1109,10 @@ function deriveTopicStatus(topic, progress, gateCompleted) {
     return "可升級";
   }
   return "攻略中";
+}
+
+function getNextThreshold(topic, level) {
+  return topic.baseMaxExp + level * topic.expStep;
 }
 
 function getDateKey() {
@@ -915,11 +1126,18 @@ function getDateKey() {
 
 function formatTime(totalSeconds) {
   const safeSeconds = Math.max(0, totalSeconds || 0);
-  const minutes = Math.floor(safeSeconds / 60)
-    .toString()
-    .padStart(2, "0");
+  const minutes = Math.floor(safeSeconds / 60).toString().padStart(2, "0");
   const seconds = (safeSeconds % 60).toString().padStart(2, "0");
   return minutes + ":" + seconds;
+}
+
+function hashString(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+  }
+  return Math.abs(hash >>> 0);
 }
 
 createRoot(document.getElementById("root")).render(<App />);
