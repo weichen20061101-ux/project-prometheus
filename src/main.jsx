@@ -459,7 +459,7 @@ function TopShell(props) {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <button onClick={onHome} className="text-left">
             <p className="text-xs uppercase tracking-[0.28em] text-cyan-300">Project Prometheus</p>
-            <h1 className="mt-1 text-xl font-black text-white">Knowledge Raid System</h1>
+            <h1 className="mt-1 text-lg font-black text-white md:text-xl">Knowledge Raid System</h1>
           </button>
           <div className="flex flex-wrap gap-2">
             {topicOrder.map(function (topicId) {
@@ -469,7 +469,7 @@ function TopShell(props) {
                   key={topicId}
                   onClick={function () { onTopicChange(topicId); }}
                   className={
-                    "rounded-full border px-4 py-2 text-sm font-bold transition " +
+                    "rounded-full border px-3 py-2 text-sm font-bold transition md:px-4 " +
                     (active
                       ? "border-cyan-400/40 bg-cyan-400/10 text-white"
                       : "border-white/8 bg-[#0b1525] text-slate-300 hover:border-cyan-400/20 hover:text-white")
@@ -506,13 +506,13 @@ function OverviewPage(props) {
   return (
     <div className="mx-auto max-w-7xl px-5 py-8 md:px-8">
       <section className="grid gap-5 lg:grid-cols-[1.25fr_0.75fr]">
-        <div className="rounded-3xl border border-white/8 bg-[#08111d] p-7 shadow-[0_24px_80px_rgba(2,12,27,0.35)]">
+        <div className="rounded-3xl border border-white/8 bg-[#08111d] p-6 shadow-[0_24px_80px_rgba(2,12,27,0.35)] md:p-7">
           <p className="inline-flex items-center gap-2 rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-sm text-cyan-200">
             <Sparkles size={14} />
             每天只做今天該做的題
           </p>
-          <h2 className="mt-5 text-4xl font-black tracking-tight text-white md:text-5xl">先選主題，再進入今天的題組。</h2>
-          <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
+          <h2 className="mt-5 text-3xl font-black tracking-tight text-white md:text-4xl">先選主題，再進入今天的題組。</h2>
+          <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-300 md:text-base">
             這個版本先把學習流程做穩。你進來先選主題，進主題頁只看今天的任務；開始測驗後，畫面只保留題目、學習資源、倒數與提交。
           </p>
         </div>
@@ -521,6 +521,18 @@ function OverviewPage(props) {
           <MetricCard label="今日已完成" value={String(completedToday)} hint="完成後才會累積 EXP" />
           <MetricCard label="今日已開始" value={String(startedToday)} hint="開始後可隨時回來續作" />
           <MetricCard label="總 EXP" value={String(totalEarnedExp)} hint="所有題目累積的經驗值" />
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-3xl border border-white/8 bg-[#08111d] p-5">
+        <div className="mb-4 flex items-center gap-3">
+          <Target className="text-cyan-300" size={18} />
+          <h3 className="text-lg font-black text-white">今天怎麼用</h3>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <FlowCard step="01" title="選主題" body="先進入你今天要推進的主線，只看那個主題的任務。" />
+          <FlowCard step="02" title="讀資源" body="每題都先看學習資料與導讀，再開始作答。" />
+          <FlowCard step="03" title="交卷驗收" body="交卷後直接看結果、錯因和補強方向。" />
         </div>
       </section>
 
@@ -543,7 +555,7 @@ function OverviewPage(props) {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-sm text-cyan-200">{topic.primarySkill}</p>
-                    <h4 className="mt-1 text-2xl font-black text-white">{topic.title}</h4>
+                    <h4 className="mt-1 text-xl font-black text-white md:text-2xl">{topic.title}</h4>
                   </div>
                   <span className="rounded-full border border-white/8 bg-[#0b1525] px-3 py-1 text-xs font-bold text-slate-300">
                     Lv.{progress.level}
@@ -654,6 +666,12 @@ function OverviewPage(props) {
 
 function TopicPage(props) {
   const { story, progress, quests, dailyState, timerMode, onBack, onStartQuest, onContinueQuest, onViewResult } = props;
+  const completedCount = quests.filter(function (quest) {
+    return dailyState.completedQuestIds.includes(quest.id);
+  }).length;
+  const startedCount = quests.filter(function (quest) {
+    return dailyState.startedQuestIds.includes(quest.id);
+  }).length;
   return (
     <div className="mx-auto max-w-6xl px-5 py-8 md:px-8">
       <button
@@ -664,11 +682,11 @@ function TopicPage(props) {
         返回首頁
       </button>
 
-      <section className="mt-5 rounded-3xl border border-white/8 bg-[#08111d] p-6">
+      <section className="mt-5 rounded-3xl border border-white/8 bg-[#08111d] p-5 md:p-6">
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div className="max-w-3xl">
             <p className="text-sm text-cyan-200">{story.primarySkill}</p>
-            <h2 className="mt-1 text-3xl font-black text-white">{story.title}</h2>
+            <h2 className="mt-1 text-2xl font-black text-white md:text-3xl">{story.title}</h2>
             <p className="mt-3 text-sm leading-7 text-slate-300">{story.goal}</p>
             <div className="mt-4 flex flex-wrap gap-2">
               {story.skills.map(function (skill) {
@@ -692,7 +710,25 @@ function TopicPage(props) {
         </div>
       </section>
 
-      <section className="mt-6 rounded-3xl border border-white/8 bg-[#08111d] p-6">
+      <section className="mt-6 grid gap-4 md:grid-cols-3">
+        <MetricCard label="今日題數" value={String(quests.length)} hint="只顯示這個主題今天抽到的題目" />
+        <MetricCard label="已開始" value={String(startedCount)} hint="中途離開也可以回來續答" />
+        <MetricCard label="已完成" value={String(completedCount)} hint="完成後會發放這個主題的 EXP" />
+      </section>
+
+      <section className="mt-6 rounded-3xl border border-white/8 bg-[#08111d] p-5 md:p-6">
+        <div className="mb-4 flex items-center gap-3">
+          <Sparkles className="text-cyan-300" size={18} />
+          <h3 className="text-lg font-black text-white">作答前提醒</h3>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <FlowCard step="01" title="先看導讀" body="每題的學習資料會告訴你這題想練什麼。" />
+          <FlowCard step="02" title="再進測驗" body="進入測驗後，畫面只保留和作答有關的內容。" />
+          <FlowCard step="03" title="看結果補強" body="答完先看錯因，再決定要不要重做一次。" />
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-3xl border border-white/8 bg-[#08111d] p-5 md:p-6">
         <div className="mb-4 flex items-center gap-3">
           <BookOpen className="text-cyan-300" size={18} />
           <h3 className="text-lg font-black text-white">今天的題組</h3>
@@ -751,7 +787,7 @@ function ExamPage(props) {
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-5 py-4 md:px-8">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Focus Mode</p>
-            <h1 className="mt-1 text-xl font-black text-white">{focusedQuest.title}</h1>
+            <h1 className="mt-1 text-lg font-black text-white md:text-xl">{focusedQuest.title}</h1>
             <p className="mt-1 text-sm text-slate-400">{currentStory.title} / {focusedQuest.track}</p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -811,7 +847,7 @@ function ExamPage(props) {
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Question Set</p>
-                <h2 className="mt-1 text-lg font-black text-white">開始作答</h2>
+                <h2 className="mt-1 text-base font-black text-white md:text-lg">開始作答</h2>
               </div>
               <button
                 onClick={onHint}
@@ -828,7 +864,7 @@ function ExamPage(props) {
                   return (
                     <div key={question.id} className="rounded-2xl border border-white/8 bg-[#0b1525] p-5">
                       <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Question {index + 1}</p>
-                      <p className="mt-2 text-base leading-7 text-white">{question.prompt}</p>
+                      <p className="mt-2 text-sm leading-7 text-white md:text-base">{question.prompt}</p>
                       <div className="mt-4 space-y-3">
                         {question.options.map(function (option) {
                           const selected = quizAnswer[question.id] === option.id;
@@ -929,7 +965,7 @@ function ResultPage(props) {
       <section className="mx-auto max-w-4xl px-5 py-8 md:px-8">
         <div className="rounded-3xl border border-white/8 bg-[#08111d] p-6 shadow-[0_24px_80px_rgba(2,12,27,0.35)]">
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Result</p>
-          <h1 className="mt-2 text-3xl font-black text-white">{quest.title}</h1>
+          <h1 className="mt-2 text-2xl font-black text-white md:text-3xl">{quest.title}</h1>
           <p className="mt-2 text-sm text-slate-400">{quest.track}</p>
 
           <div className="mt-5 grid gap-4 md:grid-cols-3">
@@ -978,7 +1014,7 @@ function QuestListItem(props) {
             <span className="rounded-full border border-white/8 bg-[#09131f] px-3 py-1 text-xs text-slate-300">Lv.{quest.minLevel}</span>
             <span className="rounded-full border border-cyan-400/15 bg-cyan-400/5 px-3 py-1 text-xs text-cyan-200">{quest.skill}</span>
           </div>
-          <h4 className="mt-3 text-xl font-black text-white">{quest.title}</h4>
+          <h4 className="mt-3 text-lg font-black text-white md:text-xl">{quest.title}</h4>
           <p className="mt-2 text-sm leading-6 text-slate-300">{quest.materialTitle}</p>
         </div>
         <div className="min-w-[180px] space-y-2">
@@ -1099,8 +1135,19 @@ function MetricCard(props) {
   return (
     <div className="rounded-3xl border border-white/8 bg-[#08111d] p-5">
       <p className="text-sm text-slate-400">{label}</p>
-      <p className="mt-2 text-2xl font-black text-white">{value}</p>
+      <p className="mt-2 text-xl font-black text-white md:text-2xl">{value}</p>
       <p className="mt-2 text-sm leading-6 text-slate-400">{hint}</p>
+    </div>
+  );
+}
+
+function FlowCard(props) {
+  const { step, title, body } = props;
+  return (
+    <div className="rounded-2xl border border-white/8 bg-[#0b1525] p-4">
+      <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">{step}</p>
+      <h4 className="mt-2 text-base font-black text-white">{title}</h4>
+      <p className="mt-2 text-sm leading-6 text-slate-300">{body}</p>
     </div>
   );
 }
