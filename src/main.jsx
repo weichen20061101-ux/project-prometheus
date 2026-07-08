@@ -132,6 +132,12 @@ function App() {
   const activeTopicQuests = activeQuestIds.map(function (questId) {
     return questIndex[questId];
   }).filter(Boolean);
+  const nextQuestAfterFocused = focusedQuest
+    ? (currentDailyState.topicQuestIds[focusedQuest.topic] || [])
+        .map(function (questId) { return questIndex[questId]; })
+        .filter(Boolean)
+        .find(function (quest) { return !currentDailyState.completedQuestIds.includes(quest.id) && quest.id !== focusedQuest.id; }) || null
+    : null;
   const totalEarnedExp = Object.values(currentDailyState.awardedExp).reduce(function (sum, value) {
     return sum + value;
   }, 0);
@@ -390,7 +396,18 @@ function App() {
         quest={focusedQuest}
         result={focusedResult}
         progress={normalizedProgress[focusedQuest.topic]}
+        nextQuest={nextQuestAfterFocused}
         onRetry={retryFocusedQuest}
+        onStartNext={function (quest) {
+          startQuest(quest);
+        }}
+        onGoOverview={function () {
+          setPageView("overview");
+        }}
+        onOpenTopic={function (topicId) {
+          setActiveStory(topicId);
+          setPageView("topic");
+        }}
         onBack={function () {
           setPageView("topic");
         }}
@@ -541,7 +558,7 @@ function OverviewPage(props) {
           <Brain className="text-cyan-300" size={18} />
           <h3 className="text-lg font-black text-white">主題列表</h3>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {topicOrder.map(function (topicId) {
             const topic = topicMeta[topicId];
             const progress = progressByTopic[topicId];
@@ -550,26 +567,26 @@ function OverviewPage(props) {
               <button
                 key={topicId}
                 onClick={function () { onOpenTopic(topicId); }}
-                className="rounded-3xl border border-white/8 bg-[#08111d] p-5 text-left transition hover:border-cyan-400/25 hover:bg-[#0c1728]"
+                className="rounded-2xl border border-white/8 bg-[#08111d] p-4 text-left transition hover:border-cyan-400/25 hover:bg-[#0c1728]"
               >
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm text-cyan-200">{topic.primarySkill}</p>
-                    <h4 className="mt-1 text-xl font-black text-white md:text-2xl">{topic.title}</h4>
+                    <p className="text-xs text-cyan-200">{topic.primarySkill}</p>
+                    <h4 className="mt-1 text-lg font-black text-white md:text-xl">{topic.title}</h4>
                   </div>
                   <span className="rounded-full border border-white/8 bg-[#0b1525] px-3 py-1 text-xs font-bold text-slate-300">
                     Lv.{progress.level}
                   </span>
                 </div>
-                <p className="mt-3 min-h-12 text-sm leading-6 text-slate-300">{topic.goal}</p>
-                <div className="mt-4">
+                <p className="mt-2 min-h-10 text-sm leading-6 text-slate-300">{topic.goal}</p>
+                <div className="mt-3">
                   <div className="flex items-center justify-between text-xs text-slate-400">
                     <span>{status}</span>
                     <span>{progress.exp}/{progress.maxExp}</span>
                   </div>
                   <ProgressBar value={progress.exp} max={progress.maxExp} />
                 </div>
-                <div className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-cyan-200">
+                <div className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-cyan-200">
                   進入主題 <ChevronRight size={16} />
                 </div>
               </button>
@@ -784,11 +801,11 @@ function ExamPage(props) {
   return (
     <main className="min-h-screen bg-[#07111f] text-slate-100">
       <header className="border-b border-white/8 bg-[#08111d]">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-5 py-4 md:px-8">
+        <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-4 px-5 py-4 md:px-8">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Focus Mode</p>
             <h1 className="mt-1 text-lg font-black text-white md:text-xl">{focusedQuest.title}</h1>
-            <p className="mt-1 text-sm text-slate-400">{currentStory.title} / {focusedQuest.track}</p>
+            <p className="mt-1 text-sm text-slate-400">{currentStory.title}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <TopMiniPill icon={Clock3} label={timerMode === "off" ? "不限時" : formatTime(secondsLeft)} />
@@ -804,58 +821,73 @@ function ExamPage(props) {
         </div>
       </header>
 
-      <section className="mx-auto max-w-4xl px-5 py-8 md:px-8">
+      <section className="mx-auto max-w-3xl px-5 py-8 md:px-8">
         <div className="space-y-5">
-          <div className="rounded-3xl border border-cyan-400/15 bg-cyan-400/5 p-5">
-            <p className="text-sm font-bold text-cyan-200">{focusedQuest.materialTitle}</p>
-            <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-200">
-              {focusedQuest.materials.map(function (item) {
-                return (
-                  <li key={item} className="flex gap-2">
-                    <ChevronRight className="mt-1 shrink-0 text-cyan-300" size={15} />
-                    {item}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-
-          {Array.isArray(focusedQuest.resources) && focusedQuest.resources.length ? (
-            <div className="rounded-3xl border border-white/8 bg-[#08111d] p-5">
-              <h2 className="text-lg font-black text-white">學習資源</h2>
-              <div className="mt-4 space-y-3">
-                {focusedQuest.resources.map(function (resource) {
-                  const key = resource.label + "-" + (resource.content || resource.url || "");
-                  return (
-                    <div key={key} className="rounded-2xl border border-white/8 bg-[#0b1525] p-4">
-                      <p className="text-sm font-bold text-cyan-200">{resource.label}</p>
-                      {resource.type === "link" ? (
-                        <a href={resource.url} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-sm text-cyan-300 underline underline-offset-4">
-                          開啟連結
-                        </a>
-                      ) : (
-                        <p className="mt-2 text-sm leading-6 text-slate-300">{resource.content}</p>
-                      )}
-                    </div>
-                  );
-                })}
+          <div className="rounded-3xl border border-white/8 bg-[#08111d] p-5">
+            <div className="mb-5 rounded-2xl border border-cyan-400/15 bg-cyan-400/5 p-4">
+              <div>
+                <p className="text-sm font-bold text-cyan-200">{focusedQuest.materialTitle}</p>
+                <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-200">
+                  {focusedQuest.materials.slice(0, 3).map(function (item) {
+                    return (
+                      <li key={item} className="flex gap-2">
+                        <ChevronRight className="mt-1 shrink-0 text-cyan-300" size={15} />
+                        {item}
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             </div>
-          ) : null}
 
-          <div className="rounded-3xl border border-white/8 bg-[#08111d] p-5">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Question Set</p>
-                <h2 className="mt-1 text-base font-black text-white md:text-lg">開始作答</h2>
+            {Array.isArray(focusedQuest.resources) && focusedQuest.resources.length ? (
+              <div className="mb-5 rounded-2xl border border-white/8 bg-[#0b1525] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Resources</p>
+                    <h2 className="mt-1 text-base font-black text-white">作答前可參考</h2>
+                  </div>
+                  <button
+                    onClick={onHint}
+                    className="inline-flex items-center gap-2 rounded-xl border border-white/8 bg-[#09131f] px-3 py-2 text-sm font-bold text-slate-200 transition hover:border-cyan-400/20 hover:text-white"
+                  >
+                    <Lightbulb size={16} />
+                    提示
+                  </button>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {focusedQuest.resources.map(function (resource) {
+                    const key = resource.label + "-" + (resource.content || resource.url || "");
+                    return (
+                      <div key={key} className="rounded-2xl border border-white/8 bg-[#09131f] p-4">
+                        <p className="text-sm font-bold text-cyan-200">{resource.label}</p>
+                        {resource.type === "link" ? (
+                          <a href={resource.url} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-sm text-cyan-300 underline underline-offset-4">
+                            開啟連結
+                          </a>
+                        ) : (
+                          <p className="mt-2 text-sm leading-6 text-slate-300">{resource.content}</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-              <button
-                onClick={onHint}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/8 bg-[#0b1525] px-4 py-2 text-sm font-bold text-slate-200 transition hover:border-cyan-400/20 hover:text-white"
-              >
-                <Lightbulb size={16} />
-                取得提示
-              </button>
+            ) : (
+              <div className="mb-5 flex justify-end">
+                <button
+                  onClick={onHint}
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/8 bg-[#0b1525] px-3 py-2 text-sm font-bold text-slate-200 transition hover:border-cyan-400/20 hover:text-white"
+                >
+                  <Lightbulb size={16} />
+                  提示
+                </button>
+              </div>
+            )}
+
+            <div className="mb-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Question Set</p>
+              <h2 className="mt-1 text-base font-black text-white md:text-lg">開始作答</h2>
             </div>
 
             {focusedQuest.type === "quiz_group" ? (
@@ -950,8 +982,14 @@ function ExamPage(props) {
 }
 
 function ResultPage(props) {
-  const { topicOrder, topicMeta, activeStory, onTopicChange, quest, result, progress, onRetry, onBack } = props;
+  const { topicOrder, topicMeta, activeStory, onTopicChange, quest, result, progress, nextQuest, onRetry, onStartNext, onGoOverview, onBack } = props;
   const canRetry = result.status === "fail";
+  const nextActionTitle =
+    result.status === "fail"
+      ? "先補觀念再重做"
+      : result.status === "reinforce"
+        ? "先補強，再決定是否前進"
+        : "保持節奏，繼續下一題";
   return (
     <main className="min-h-screen bg-[#07111f] text-slate-100">
       <TopShell
@@ -978,6 +1016,42 @@ function ResultPage(props) {
             <ReviewBadge result={result} />
           </div>
 
+          <div className="mt-6 rounded-2xl border border-white/8 bg-[#0b1525] p-5">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Next Step</p>
+            <h2 className="mt-2 text-lg font-black text-white">{nextActionTitle}</h2>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              {canRetry ? (
+                <FlowCard
+                  step="01"
+                  title="重做同一題"
+                  body="先看錯因和提示，回到同一題重新作答。"
+                />
+              ) : result.status === "reinforce" ? (
+                <FlowCard
+                  step="01"
+                  title="補強這一題"
+                  body="這題已過線，但先把缺漏概念補齊會更穩。"
+                />
+              ) : (
+                <FlowCard
+                  step="01"
+                  title="保留這題節奏"
+                  body="這題已通過，維持同樣的作答結構往下一題推進。"
+                />
+              )}
+              <FlowCard
+                step="02"
+                title="回主題頁"
+                body="回到同一主題，決定是繼續這條線還是切換主題。"
+              />
+              <FlowCard
+                step="03"
+                title={nextQuest ? "前往下一題" : "切換其他主題"}
+                body={nextQuest ? "今天這個主題還有下一題可以直接開始。" : "這個主題今天沒有下一題了，可以切去別的主題。"}
+              />
+            </div>
+          </div>
+
           <div className="mt-6 flex flex-wrap gap-3">
             {canRetry ? (
               <button
@@ -988,6 +1062,15 @@ function ResultPage(props) {
                 回到題目重做
               </button>
             ) : null}
+            {!canRetry && nextQuest ? (
+              <button
+                onClick={function () { onStartNext(nextQuest); }}
+                className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-4 py-2 font-bold text-slate-950 transition hover:bg-cyan-300"
+              >
+                <Play size={16} />
+                開始下一題
+              </button>
+            ) : null}
             <button
               onClick={onBack}
               className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#0b1525] px-4 py-2 font-bold text-slate-200 transition hover:border-cyan-400/20 hover:text-white"
@@ -995,6 +1078,15 @@ function ResultPage(props) {
               <ArrowLeft size={16} />
               回到主題頁
             </button>
+            {!nextQuest ? (
+              <button
+                onClick={onGoOverview}
+                className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#0b1525] px-4 py-2 font-bold text-slate-200 transition hover:border-cyan-400/20 hover:text-white"
+              >
+                <ChevronRight size={16} />
+                切換主題
+              </button>
+            ) : null}
           </div>
         </div>
       </section>
