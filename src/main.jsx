@@ -154,7 +154,7 @@ function App() {
         reviewMessage:
           activeStory === "analyst" && quest.id === current.gateQuestId
             ? "今日分析師首題已開始。先用自己的話回答，再看系統的補強追問。"
-            : quest.title + " 已開始。先讀學習資料，再用自己的話作答。",
+            : quest.title + " 已開始。先讀快速導讀和作答方向，再開始回答。",
         hintLevel: 0,
         timeLeft: {
           ...current.timeLeft,
@@ -652,18 +652,80 @@ function QuestCard(props) {
         <span className="rounded-full bg-cyan-400/15 px-3 py-1 text-sm font-black text-cyan-200">+{quest.exp} EXP</span>
       </div>
 
-      <div className="mt-4 rounded-xl border border-cyan-400/10 bg-cyan-400/5 p-4">
-        <p className="font-bold text-cyan-200">{quest.materialTitle}</p>
-        <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-300">
-          {quest.materials.map(function (item) {
-            return (
-              <li key={item} className="flex gap-2">
-                <ChevronRight className="mt-1 shrink-0 text-cyan-300" size={15} />
-                {item}
-              </li>
-            );
-          })}
-        </ul>
+      <div className="mt-4 space-y-4 rounded-xl border border-cyan-400/10 bg-cyan-400/5 p-4">
+        <div>
+          <p className="font-bold text-cyan-200">{quest.materialTitle}</p>
+          <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-300">
+            {quest.materials.map(function (item) {
+              return (
+                <li key={item} className="flex gap-2">
+                  <ChevronRight className="mt-1 shrink-0 text-cyan-300" size={15} />
+                  {item}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        {Array.isArray(quest.summary) && quest.summary.length ? (
+          <div className="rounded-xl border border-white/8 bg-[#09131f] p-3">
+            <p className="text-sm font-bold text-white">快速導讀</p>
+            <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-300">
+              {quest.summary.map(function (item) {
+                return (
+                  <li key={item} className="flex gap-2">
+                    <ChevronRight className="mt-1 shrink-0 text-slate-400" size={15} />
+                    {item}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
+
+        {Array.isArray(quest.answerGuide) && quest.answerGuide.length ? (
+          <div className="rounded-xl border border-white/8 bg-[#09131f] p-3">
+            <p className="text-sm font-bold text-white">作答方向</p>
+            <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-300">
+              {quest.answerGuide.map(function (item) {
+                return (
+                  <li key={item} className="flex gap-2">
+                    <ChevronRight className="mt-1 shrink-0 text-slate-400" size={15} />
+                    {item}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
+
+        {Array.isArray(quest.resources) && quest.resources.length ? (
+          <div className="rounded-xl border border-white/8 bg-[#09131f] p-3">
+            <p className="text-sm font-bold text-white">學習資源</p>
+            <div className="mt-2 space-y-3">
+              {quest.resources.map(function (resource) {
+                const key = resource.label + "-" + (resource.content || resource.url || "");
+                return (
+                  <div key={key} className="rounded-lg border border-white/8 bg-[#0b1525] p-3">
+                    <p className="text-sm font-bold text-cyan-200">{resource.label}</p>
+                    {resource.type === "link" ? (
+                      <a
+                        href={resource.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-flex text-sm text-cyan-300 underline underline-offset-4"
+                      >
+                        開啟參考連結
+                      </a>
+                    ) : (
+                      <p className="mt-2 text-sm leading-6 text-slate-300">{resource.content}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/8 bg-[#09131f] p-3">

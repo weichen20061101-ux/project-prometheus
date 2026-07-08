@@ -348,68 +348,23 @@ function keywordList(topic, levelTitle, label, extras) {
   return [label, topic.primarySkill, levelTitle, ...(extras || [])];
 }
 
-function buildStandardQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, totalPerLevel) {
-  const questId = topic.id + "-" + levelIndex + "-" + String(itemIndex + 1).padStart(2, "0");
-  const lowMinutes = topic.id === "analyst" ? 20 : topic.id === "dailyEnglish" ? 8 : 10;
-  const seconds = Math.round((lowMinutes + levelIndex + (itemIndex % 3) * 2) * 60);
-  const expBase = topic.id === "analyst" ? 52 : topic.id === "dailyEnglish" ? 20 : 28;
-  const exp = expBase + levelIndex * 6 + (itemIndex % 4) * 2;
-  const lead = levelSpecData.materialLead;
-  const rubric = [
-    {
-      concept: "說明核心概念",
-      keywords: keywordList(topic, levelSpecData.title, itemLabel, [topic.title]),
-      followUp: "請把 " + itemLabel + " 用自己的話重新解釋一次。",
-      coachNote: "先定義它，再說它在這個主題裡的作用。",
-    },
-    {
-      concept: "指出判斷方式",
-      keywords: keywordList(topic, levelSpecData.title, itemLabel, ["判斷", "標準"]),
-      followUp: "你會用什麼標準判斷 " + itemLabel + " 做得好或不好？",
-      coachNote: "不要只下結論，要說判斷依據。",
-    },
-    {
-      concept: "加入情境或例子",
-      keywords: keywordList(topic, levelSpecData.title, itemLabel, ["例子", "情境", "應用"]),
-      followUp: "請補一個你能想像的例子，讓答案更落地。",
-      coachNote: "用例子可以看出你是不是真的理解。",
-    },
-  ];
-
-  if (topic.id === "dailyEnglish") {
+function buildQuestRubric(topic, levelSpecData, itemLabel, concepts) {
+  return concepts.map(function (item) {
     return {
-      id: questId,
-      topic: topic.id,
-      skill: levelSpecData.skill,
-      type: "standard",
-      title: levelSpecData.title + " " + String(itemIndex + 1).padStart(2, "0") + "｜" + itemLabel,
-      track: topic.title + " / " + levelSpecData.skill,
-      minLevel: levelIndex,
-      maxLevel: levelIndex,
-      seconds,
-      exp,
-      materialTitle: "學習資料：" + lead,
-      materials: [
-        lead,
-        "本題情境：" + itemLabel,
-        "先用最短句說得出來，再嘗試延長一句。",
-        "回答時至少寫一句英文，再補一句中文說明。"
-      ],
-      questions: [
-        "如果情境是「" + itemLabel + "」，你會怎麼用英文開口？",
-        "請寫一句英文和一句中文說明，讓人看得出你的意思。",
-        "這個情境最常用的關鍵字或句型是什麼？",
-      ],
-      rubric,
-      clear: "至少寫一句英文、一句中文，並指出一個關鍵字或句型。",
-      hints: [
-        "先從最短句開始，不用一次講很長。",
-        "把主詞、動詞、關鍵名詞先湊齊。",
-        "如果不確定，就先用最常見的日常句型。 ",
-      ],
+      concept: item.concept,
+      keywords: keywordList(topic, levelSpecData.title, itemLabel, item.keywords),
+      followUp: item.followUp.replaceAll("{label}", itemLabel),
+      coachNote: item.coachNote,
     };
-  }
+  });
+}
 
+function noteResource(label, content) {
+  return { type: "note", label, content };
+}
+
+function buildBaseQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp) {
+  const questId = topic.id + "-" + levelIndex + "-" + String(itemIndex + 1).padStart(2, "0");
   return {
     id: questId,
     topic: topic.id,
@@ -421,26 +376,251 @@ function buildStandardQuest(topic, levelIndex, levelSpecData, itemLabel, itemInd
     maxLevel: levelIndex,
     seconds,
     exp,
-    materialTitle: "學習資料：" + lead,
+  };
+}
+
+function buildAnalystConceptQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp) {
+  return {
+    ...buildBaseQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp),
+    materialTitle: "學習資料：" + levelSpecData.materialLead,
     materials: [
-      lead,
+      levelSpecData.materialLead,
       "本題焦點：" + itemLabel,
-      "先用自己的話定義，再補判斷標準。",
-      "最後補一個例子，讓答案更有驗收性。"
+      "先講清楚定義，再把它放進一個最小財務情境。",
+      "不要背名詞，要說它在公司裡實際代表什麼。 ",
     ],
     questions: [
-      itemLabel + " 在這個 level 代表什麼？",
-      "你會怎麼判斷 " + itemLabel + " 做得好或不好？",
-      "請用一個情境、例子或反例說明 " + itemLabel + "。",
+      "如果你要用白話解釋「" + itemLabel + "」，你會怎麼說？",
+      "這個概念在財報或公司經營裡，通常反映什麼現象？",
+      "請用一個最小例子說明它怎麼變化。",
     ],
-    rubric,
-    clear: "請回答三題，至少包含定義、判斷方式與一個例子。",
+    summary: [
+      itemLabel + " 屬於財報基礎概念，重點不是背定義，而是知道它在公司裡代表什麼。",
+      "先把名詞翻成白話，再連回公司正在發生的事情，答案就會自然很多。",
+    ],
+    answerGuide: [
+      "先用自己的話定義，不要照課本。",
+      "再補一句它在公司經營或財報裡代表什麼。",
+      "最後用一個最小數字例子說明變化。",
+    ],
+    resources: [
+      noteResource("白話提醒", itemLabel + " 不是考名詞背誦，而是看你能不能把它翻成真實公司語言。"),
+      noteResource("作答骨架", "白話定義 -> 商業意義 -> 最小例子"),
+    ],
+    rubric: buildQuestRubric(topic, levelSpecData, itemLabel, [
+      { concept: "白話定義", keywords: ["定義", "意思", "代表"], followUp: "請把 {label} 改用更白話的方式講一次。", coachNote: "先像在教初學者一樣解釋，不要直接背術語。" },
+      { concept: "商業意義", keywords: ["反映", "代表", "公司", "財報"], followUp: "這個概念在真實公司裡通常代表什麼？", coachNote: "不要只停在名詞本身，要連到公司運作。" },
+      { concept: "最小例子", keywords: ["例如", "假設", "如果", "增加", "減少"], followUp: "請補一個數字或情境例子。", coachNote: "只要一個很小的例子，就能看出你有沒有真的懂。" },
+    ]),
+    clear: "請用白話解釋、補商業意義，再舉一個最小例子。",
     hints: [
-      "先解釋概念本身，再說它的用途。",
-      "如果只講定義，答案通常不夠完整。",
-      "用例子或反例，最能看出是否真的理解。",
+      "想像你在向完全沒學過財報的人解釋。",
+      "先講它是什麼，再講它反映了什麼。",
+      "用借款、購貨、收款這種小情境最容易舉例。",
     ],
   };
+}
+
+function buildAnalystCaseQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp) {
+  const caseNumbers = [
+    "公司本季營收年增 18%，毛利率從 41% 降到 36%，存貨比上季增加 22%。",
+    "公司宣布擴產，資本支出提高，但自由現金流轉弱，短期借款同步上升。",
+    "管理層表示需求仍強，但應收帳款天數拉長，現金回收速度變慢。",
+    "公司獲利成長，但營運現金流沒有同步增加，且業外收益占比提高。",
+  ];
+  const caseText = caseNumbers[(levelIndex + itemIndex) % caseNumbers.length];
+  return {
+    ...buildBaseQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp),
+    materialTitle: "案例資料：" + itemLabel,
+    materials: [
+      caseText,
+      "請不要先背定義，先像分析師一樣抓異常點。",
+      "先判讀訊號，再推可能原因，最後下暫時結論。",
+    ],
+    questions: [
+      "這段案例裡，和「" + itemLabel + "」最有關的訊號是什麼？",
+      "你認為這個訊號比較偏正面、偏負面，還是需要更多資訊？為什麼？",
+      "如果你要追問管理層一個問題，你會問什麼？",
+    ],
+    summary: [
+      "這題在練的不是背概念，而是從一小段公司資訊裡先抓出最值得看的訊號。",
+      "先找異常，再判讀方向，最後想下一個要問的問題。",
+    ],
+    answerGuide: [
+      "先指出案例裡最異常的一個訊號。",
+      "再說它偏正面、偏負面，還是暫時無法下定論。",
+      "最後補一個你會追問管理層的問題。",
+    ],
+    resources: [
+      noteResource("分析順序", "訊號 -> 判讀 -> 追問"),
+      noteResource("判讀提醒", "不要急著一次下結論，先說你還缺什麼資訊。"),
+    ],
+    rubric: buildQuestRubric(topic, levelSpecData, itemLabel, [
+      { concept: "抓出關鍵訊號", keywords: ["訊號", "重點", "關鍵", "異常"], followUp: "請指出案例裡最值得先看的那一個訊號。", coachNote: "不要整段都講，先抓最關鍵的變化。" },
+      { concept: "做出判讀", keywords: ["正面", "負面", "觀察", "風險", "原因"], followUp: "你為什麼這樣判讀？請補原因。", coachNote: "判讀一定要連原因，不要只說好或不好。" },
+      { concept: "提出追問", keywords: ["追問", "管理層", "確認", "還要"], followUp: "如果只能多問一題，你最想確認什麼？", coachNote: "好的分析不是一次下定論，而是知道下一題要問什麼。" },
+    ]),
+    clear: "請抓出訊號、做出判讀，並提出一個你會追問的問題。",
+    hints: [
+      "先看哪個數字或變化最不尋常。",
+      "再想這個變化可能來自需求、成本、現金或庫存哪一邊。",
+      "最後補一句：如果要確認，我還想再看什麼。",
+    ],
+  };
+}
+
+function buildEnglishMaterialQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp) {
+  const sentencePool = [
+    "Management expects demand to remain resilient, although margin pressure may persist in the second half.",
+    "The company continues to prioritize inventory discipline while maintaining selective capital expenditure.",
+    "Customer orders improved sequentially, but visibility for the next quarter remains limited.",
+    "Free cash flow declined due to higher working capital needs and expansion-related spending.",
+  ];
+  const sourceSentence = sentencePool[(levelIndex + itemIndex) % sentencePool.length];
+  return {
+    ...buildBaseQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp),
+    materialTitle: "英文材料：" + itemLabel,
+    materials: [
+      sourceSentence,
+      "先不要逐字翻，先抓語氣、主詞、動作、限制條件。",
+      "把句子拆成：公司在說什麼 / 但書在哪裡 / 對投資人代表什麼。",
+    ],
+    questions: [
+      "這句英文如果用中文白話重述，最自然的意思是什麼？",
+      "句子裡最重要的 1 到 2 個關鍵字是什麼？它們在這裡的語氣是偏正面、保留還是警告？",
+      "如果你是做研究筆記，你會怎麼用一句中文記下這句話？",
+    ],
+    summary: [
+      "這題先練抓句意，不是逐字翻譯。",
+      "真正重點是找出語氣轉折、關鍵字，以及這句話對研究判讀有什麼影響。",
+    ],
+    answerGuide: [
+      "先用中文白話重述整句意思。",
+      "再抓 1 到 2 個關鍵字和語氣。",
+      "最後濃縮成一句自己的研究筆記。",
+    ],
+    resources: [
+      noteResource("拆句方式", "主詞是誰 -> 說了什麼 -> but/although 後面補了什麼保留條件"),
+      noteResource("翻譯提醒", "不要逐字翻，先確保你真的懂句子在講什麼。"),
+    ],
+    rubric: buildQuestRubric(topic, levelSpecData, itemLabel, [
+      { concept: "白話重述", keywords: ["中文", "意思", "重述", "表示"], followUp: "請不要逐字翻，直接用中文把意思重講一次。", coachNote: "英文學習在這裡的重點不是翻得漂亮，是有沒有抓到意思。" },
+      { concept: "關鍵字與語氣", keywords: ["關鍵字", "語氣", "正面", "保留", "警告"], followUp: "哪個字最能決定這句話的語氣？", coachNote: "先抓關鍵字，再判斷這句話是樂觀、保守還是提醒風險。" },
+      { concept: "研究筆記輸出", keywords: ["筆記", "摘要", "重點", "投資人"], followUp: "如果只能記一句，你會怎麼記？", coachNote: "這一步是在練把材料轉成自己的研究語言。" },
+    ]),
+    clear: "請白話重述句意，抓出關鍵字與語氣，再寫一句研究筆記。",
+    hints: [
+      "先抓主詞和主要動詞，不要一開始就逐字翻。",
+      "看 although、but、remain 這種字，通常能看出保留條件。",
+      "最後把它濃縮成一句你之後看得懂的中文。",
+    ],
+  };
+}
+
+function buildDailyEnglishQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp) {
+  return {
+    ...buildBaseQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp),
+    materialTitle: "情境任務：" + itemLabel,
+    materials: [
+      levelSpecData.materialLead,
+      "你現在正在這個情境裡：" + itemLabel,
+      "先講最短可用句，再補一個延伸句。",
+      "目標不是文法滿分，是能真的開口。 ",
+    ],
+    questions: [
+      "如果現在真的遇到「" + itemLabel + "」，你第一句會怎麼說？",
+      "再補一句，讓對方更清楚你的意思或能接話。",
+      "這個情境你最想記住的句型或關鍵字是什麼？",
+    ],
+    summary: [
+      "這題目標不是文法完美，而是能在真實情境裡先開口。",
+      "先有一句能用的，再補第二句讓對話走下去。",
+    ],
+    answerGuide: [
+      "先寫一句最短可用句。",
+      "再補一句資訊或需求，讓對方更懂你。",
+      "最後帶走一個句型或關鍵字。",
+    ],
+    resources: [
+      noteResource("開口原則", "先可用，再自然，最後才是漂亮。"),
+      noteResource("作答骨架", "第一句先講目的，第二句補資訊。"),
+    ],
+    rubric: buildQuestRubric(topic, levelSpecData, itemLabel, [
+      { concept: "先開口", keywords: ["hello", "hi", "i", "can", "would", "please"], followUp: "先給我一句你真的敢開口講的版本。", coachNote: "先有一句能用的，不要先追求很完整。" },
+      { concept: "延伸一句", keywords: ["and", "because", "need", "want", "looking"], followUp: "再補一句，讓情境更完整。", coachNote: "第二句的功能是讓對話走下去。" },
+      { concept: "記住句型", keywords: ["句型", "關鍵字", "用法"], followUp: "這題你最值得背下來的是哪個句型？", coachNote: "每題至少帶走一個可重複使用的句型。" },
+    ]),
+    clear: "至少寫兩句可直接使用的英文，並指出一個你要記住的句型或關鍵字。",
+    hints: [
+      "先用最短句把目的講出來。",
+      "第二句只要補資訊，不用硬寫很長。",
+      "把這題當成真的要對人開口，不是寫考卷。",
+    ],
+  };
+}
+
+function buildGenericAppliedQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp) {
+  return {
+    ...buildBaseQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp),
+    materialTitle: "任務焦點：" + itemLabel,
+    materials: [
+      levelSpecData.materialLead,
+      "本題焦點：" + itemLabel,
+      "請把它當成你今天真的要處理的一個小任務。",
+    ],
+    questions: [
+      "如果今天真的要處理「" + itemLabel + "」，你第一步會做什麼？",
+      "你會用什麼標準判斷自己有沒有做對？",
+      "最容易失敗的點是什麼？你會怎麼避免？",
+    ],
+    summary: [
+      "這題把抽象概念轉成今天真的能執行的小任務。",
+      "你的答案重點應該是可開始、可判斷、可修正。",
+    ],
+    answerGuide: [
+      "先講第一步要做什麼。",
+      "再講你會怎麼驗收自己有沒有做對。",
+      "最後補一個最可能失敗的點與避免方式。",
+    ],
+    resources: [
+      noteResource("任務原則", "能開始 > 看起來完整；能驗收 > 聽起來漂亮。"),
+      noteResource("作答骨架", "第一步 -> 驗收標準 -> 失敗點"),
+    ],
+    rubric: buildQuestRubric(topic, levelSpecData, itemLabel, [
+      { concept: "先做什麼", keywords: ["第一步", "先", "開始"], followUp: "請把第一步講得再具體一點。", coachNote: "先把任務變成可以開始的動作。" },
+      { concept: "判斷標準", keywords: ["標準", "判斷", "完成"], followUp: "你如何知道自己不是只是做了，而是真的做對？", coachNote: "沒有標準就很難驗收。" },
+      { concept: "風險與修正", keywords: ["失敗", "卡點", "避免", "修正"], followUp: "最常出錯的是哪一步？", coachNote: "真的能持續的人，通常都先知道自己會怎麼失敗。" },
+    ]),
+    clear: "請講出第一步、判斷標準，以及一個你會預防的失敗點。",
+    hints: [
+      "先把它講成具體動作，不要停在概念。",
+      "再補一句：怎樣算完成。",
+      "最後想一個最可能出錯的地方。",
+    ],
+  };
+}
+
+function buildStandardQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, totalPerLevel) {
+  const lowMinutes = topic.id === "analyst" ? 16 : topic.id === "dailyEnglish" ? 6 : 8;
+  const seconds = Math.round((lowMinutes + levelIndex + (itemIndex % 3) * 2) * 60);
+  const expBase = topic.id === "analyst" ? 52 : topic.id === "dailyEnglish" ? 20 : 28;
+  const exp = expBase + levelIndex * 6 + (itemIndex % 4) * 2;
+
+  if (topic.id === "analyst") {
+    return levelIndex <= 2
+      ? buildAnalystConceptQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp)
+      : buildAnalystCaseQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp);
+  }
+
+  if (topic.id === "english") {
+    return buildEnglishMaterialQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp);
+  }
+
+  if (topic.id === "dailyEnglish") {
+    return buildDailyEnglishQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp);
+  }
+
+  return buildGenericAppliedQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp);
 }
 
 function generateLevelPool(topic, levelSpecs, countPerLevel) {
