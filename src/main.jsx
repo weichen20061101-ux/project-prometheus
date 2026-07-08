@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  ArrowLeft,
   BadgePlus,
   BookOpenCheck,
   Brain,
@@ -40,6 +41,7 @@ function App() {
   const [customTopics, setCustomTopics] = useState(initialState.customTopics);
   const [learningSettings, setLearningSettings] = useState(initialState.learningSettings);
   const [activeStory, setActiveStory] = useState(initialState.activeStory);
+  const [pageView, setPageView] = useState(initialState.pageView);
   const [progressByTopic, setProgressByTopic] = useState(initialState.progressByTopic);
   const [dailyState, setDailyState] = useState(initialState.dailyState);
   const [topicDraft, setTopicDraft] = useState({
@@ -111,13 +113,14 @@ function App() {
     function () {
       saveAppState({
         activeStory: topicMeta[activeStory] ? activeStory : "analyst",
+        pageView,
         customTopics: normalizedCustomTopics,
         learningSettings,
         progressByTopic: normalizedProgress,
         dailyState: currentDailyState,
       });
     },
-    [activeStory, normalizedCustomTopics, learningSettings, normalizedProgress, currentDailyState, topicMeta],
+    [activeStory, pageView, normalizedCustomTopics, learningSettings, normalizedProgress, currentDailyState, topicMeta],
   );
 
   const questIndex = useMemo(function () {
@@ -350,6 +353,12 @@ function App() {
       skillsText: "",
     });
     setActiveStory(nextId);
+    setPageView("topic");
+  }
+
+  function openTopic(topicId) {
+    setActiveStory(topicId);
+    setPageView("topic");
   }
 
   const activeStatus = deriveTopicStatus(normalizedProgress[activeStory]);
@@ -373,8 +382,8 @@ function App() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm text-cyan-200">今日狀態</p>
-                <h2 className="mt-1 text-2xl font-black text-white">{currentStory.title}</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-300">{currentStory.goal}</p>
+                <h2 className="mt-1 text-2xl font-black text-white">{pageView === "topic" ? currentStory.title : "全部主題"}</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-300">{pageView === "topic" ? currentStory.goal : "先選一個主題，再進入該主題的專屬頁面做題。"}</p>
               </div>
               <Target className="text-cyan-300" size={42} />
             </div>
@@ -387,35 +396,95 @@ function App() {
         </div>
       </section>
 
+      {pageView === "overview" ? (
+        <section className="mx-auto grid max-w-7xl gap-5 px-5 py-6 lg:grid-cols-[1fr_360px] md:px-8">
+          <section className="space-y-5">
+            <Panel title="選擇主題" icon={Flame}>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {topicOrder.map(function (topicId) {
+                  const story = topicMeta[topicId];
+                  const progress = normalizedProgress[topicId];
+                  const status = deriveTopicStatus(progress);
+                  return (
+                    <button
+                      key={topicId}
+                      onClick={function () { openTopic(topicId); }}
+                      className="rounded-2xl border border-white/8 bg-[#0b1525] p-5 text-left transition hover:border-cyan-400/30 hover:bg-[#0f1d31]"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm text-cyan-200">{story.primarySkill}</p>
+                          <h3 className="mt-1 text-xl font-black text-white">{story.title}</h3>
+                        </div>
+                        <span className="rounded-full border border-white/10 bg-[#09131f] px-3 py-1 text-xs text-slate-300">Lv.{progress.level}</span>
+                      </div>
+                      <p className="mt-3 text-sm leading-6 text-slate-300">{story.goal}</p>
+                      <div className="mt-4">
+                        <div className="flex items-center justify-between text-xs text-slate-400">
+                          <span>{status}</span>
+                          <span>{progress.exp}/{progress.maxExp}</span>
+                        </div>
+                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-800">
+                          <div className="h-full rounded-full bg-cyan-400" style={{ width: Math.min(100, Math.round((progress.exp / progress.maxExp) * 100)) + "%" }} />
+                        </div>
+                      </div>
+                      <div className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-cyan-200">
+                        進入主題 <ChevronRight size={16} />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </Panel>
+          </section>
+
+          <aside className="space-y-5">
+            <Panel title="學習設定" icon={Settings2}>
+              <div className="space-y-5">
+                <SettingGroup
+                  title="每日任務量"
+                  value={learningSettings.dailyLoad}
+                  options={SETTINGS_OPTIONS.dailyLoad}
+                  onChange={function (value) { updateSetting("dailyLoad", value); }}
+                />
+                <SettingGroup
+                  title="驗收模式"
+                  value={learningSettings.reviewMode}
+                  options={SETTINGS_OPTIONS.reviewMode}
+                  onChange={function (value) { updateSetting("reviewMode", value); }}
+                />
+                <SettingGroup
+                  title="計時方式"
+                  value={learningSettings.timerMode}
+                  options={SETTINGS_OPTIONS.timerMode}
+                  onChange={function (value) { updateSetting("timerMode", value); }}
+                />
+              </div>
+            </Panel>
+
+            <Panel title="新增主題" icon={BadgePlus}>
+              <div className="space-y-3">
+                <input value={topicDraft.title} onChange={function (event) { updateTopicDraft("title", event.target.value); }} className="w-full rounded-xl border border-white/10 bg-[#09131f] px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/40" placeholder="主題名稱，例如：程式設計" />
+                <input value={topicDraft.primarySkill} onChange={function (event) { updateTopicDraft("primarySkill", event.target.value); }} className="w-full rounded-xl border border-white/10 bg-[#09131f] px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/40" placeholder="核心技能，例如：React 基礎" />
+                <input value={topicDraft.skillsText} onChange={function (event) { updateTopicDraft("skillsText", event.target.value); }} className="w-full rounded-xl border border-white/10 bg-[#09131f] px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/40" placeholder="技能清單，逗號分隔" />
+                <textarea value={topicDraft.goal} onChange={function (event) { updateTopicDraft("goal", event.target.value); }} rows={3} className="w-full resize-none rounded-xl border border-white/10 bg-[#09131f] px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/40" placeholder="主題目標，例如：能獨立做出作品" />
+                <button onClick={addCustomTopic} className="w-full rounded-xl bg-cyan-400 px-4 py-2 font-bold text-slate-950 transition hover:bg-cyan-300">
+                  建立新主題
+                </button>
+              </div>
+            </Panel>
+          </aside>
+        </section>
+      ) : (
       <section className="mx-auto grid max-w-7xl gap-5 px-5 py-6 lg:grid-cols-[290px_1fr_360px] md:px-8">
         <aside className="space-y-5">
-          <Panel title="主題切換" icon={Flame}>
-            <div className="space-y-2">
-              {topicOrder.map(function (topicId) {
-                const story = topicMeta[topicId];
-                const progress = normalizedProgress[topicId];
-                const active = topicId === activeStory;
-                const status = deriveTopicStatus(progress);
-                return (
-                  <button
-                    key={topicId}
-                    onClick={function () { setActiveStory(topicId); }}
-                    className={
-                      "w-full rounded-xl border px-4 py-3 text-left transition " +
-                      (active
-                        ? "border-cyan-400/40 bg-cyan-400/10 text-white"
-                        : "border-white/8 bg-[#0b1525] text-slate-200 hover:border-cyan-400/20")
-                    }
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-bold">{story.title}</span>
-                      <span className="text-xs text-slate-400">Lv.{progress.level}</span>
-                    </div>
-                    <p className="mt-1 text-sm leading-5 text-slate-400">{story.primarySkill} / {status}</p>
-                  </button>
-                );
-              })}
-            </div>
+          <Panel title="返回主題" icon={Flame}>
+            <button
+              onClick={function () { setPageView("overview"); }}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-[#0b1525] px-4 py-3 font-bold text-slate-200 transition hover:border-cyan-400/30 hover:text-white"
+            >
+              <ArrowLeft size={16} /> 回到主題首頁
+            </button>
           </Panel>
 
           <Panel title="技能進度" icon={Brain}>
@@ -652,6 +721,7 @@ function App() {
           </Panel>
         </aside>
       </section>
+      )}
     </main>
   );
 }
