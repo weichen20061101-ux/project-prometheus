@@ -195,10 +195,21 @@ function App() {
   function updateQuizAnswer(questId, questionId, value) {
     setDailyState(function (current) {
       const currentAnswer = current.answers[questId];
-      const nextQuizAnswer =
+      const baseQuizAnswer =
         currentAnswer && typeof currentAnswer === "object" && !Array.isArray(currentAnswer)
-          ? { ...currentAnswer, [questionId]: value }
-          : { [questionId]: value };
+          ? { ...currentAnswer }
+          : {};
+      const question = questIndex[questId]?.questions?.find(function (item) {
+        return item.id === questionId;
+      });
+      let nextValue = value;
+      if (question?.format === "multi_select") {
+        const previousValues = Array.isArray(baseQuizAnswer[questionId]) ? baseQuizAnswer[questionId] : [];
+        nextValue = previousValues.includes(value)
+          ? previousValues.filter(function (item) { return item !== value; })
+          : [...previousValues, value];
+      }
+      const nextQuizAnswer = { ...baseQuizAnswer, [questionId]: nextValue };
       return {
         ...current,
         answers: {
@@ -794,7 +805,7 @@ function ExamPage(props) {
 
   const quizAnswer = answer && typeof answer === "object" && !Array.isArray(answer) ? answer : {};
   const answeredCount = focusedQuest.type === "quiz_group"
-    ? focusedQuest.questions.filter(function (question) { return Boolean(quizAnswer[question.id]); }).length
+    ? focusedQuest.questions.filter(function (question) { return isQuizQuestionAnswered(question, quizAnswer); }).length
     : 0;
   const visibleHints = Array.isArray(focusedQuest.hints) ? focusedQuest.hints.slice(0, hintLevel) : [];
 
@@ -896,10 +907,15 @@ function ExamPage(props) {
                   return (
                     <div key={question.id} className="rounded-2xl border border-white/8 bg-[#0b1525] p-5">
                       <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Question {index + 1}</p>
+                      {question.format === "multi_select" ? (
+                        <p className="mt-2 text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">Multi Select</p>
+                      ) : null}
                       <p className="mt-2 text-sm leading-7 text-white md:text-base">{question.prompt}</p>
                       <div className="mt-4 space-y-3">
                         {question.options.map(function (option) {
-                          const selected = quizAnswer[question.id] === option.id;
+                          const selected = question.format === "multi_select"
+                            ? Array.isArray(quizAnswer[question.id]) && quizAnswer[question.id].includes(option.id)
+                            : quizAnswer[question.id] === option.id;
                           return (
                             <label
                               key={option.id}
@@ -911,7 +927,7 @@ function ExamPage(props) {
                               }
                             >
                               <input
-                                type="radio"
+                                type={question.format === "multi_select" ? "checkbox" : "radio"}
                                 name={focusedQuest.id + "-" + question.id}
                                 value={option.id}
                                 checked={selected}
@@ -1543,7 +1559,7 @@ function evaluateQuizGroupAnswer(answer, quest) {
   const quizAnswer = answer && typeof answer === "object" && !Array.isArray(answer) ? answer : {};
   const questions = Array.isArray(quest.questions) ? quest.questions : [];
   const unansweredItems = questions.filter(function (question) {
-    return !quizAnswer[question.id];
+    return !isQuizQuestionAnswered(question, quizAnswer);
   });
 
   if (unansweredItems.length) {
@@ -1566,17 +1582,15 @@ function evaluateQuizGroupAnswer(answer, quest) {
   let correctCount = 0;
   questions.forEach(function (question) {
     const selected = quizAnswer[question.id];
-    if (selected === question.correctAnswer) {
+    if (isCorrectQuizSelection(question, selected)) {
       correctCount += 1;
       return;
     }
-    const selectedOption = question.options.find(function (option) { return option.id === selected; });
-    const correctOption = question.options.find(function (option) { return option.id === question.correctAnswer; });
     incorrectItems.push({
       id: question.id,
       prompt: question.prompt,
-      selectedText: selectedOption?.text || "",
-      correctText: correctOption?.text || "",
+      selectedText: getQuizOptionText(question, selected),
+      correctText: getCorrectQuizOptionText(question),
       explanation: question.explanation,
     });
   });
@@ -1629,6 +1643,49 @@ function evaluateQuizGroupAnswer(answer, quest) {
     totalCount,
     incorrectItems,
   };
+}
+
+function isQuizQuestionAnswered(question, quizAnswer) {
+  const value = quizAnswer[question.id];
+  if (question.format === "multi_select") {
+    return Array.isArray(value) && value.length > 0;
+  }
+  return Boolean(value);
+}
+
+function isCorrectQuizSelection(question, selected) {
+  if (question.format === "multi_select") {
+    const selectedValues = Array.isArray(selected) ? [...selected].sort() : [];
+    const correctValues = Array.isArray(question.correctAnswer) ? [...question.correctAnswer].sort() : [];
+    return selectedValues.length === correctValues.length && correctValues.every(function (value, index) {
+      return value === selectedValues[index];
+    });
+  }
+  return selected === question.correctAnswer;
+}
+
+function getQuizOptionText(question, selected) {
+  if (Array.isArray(selected)) {
+    return selected
+      .map(function (id) {
+        return question.options.find(function (option) { return option.id === id; })?.text || "";
+      })
+      .filter(Boolean)
+      .join(" / ");
+  }
+  return question.options.find(function (option) { return option.id === selected; })?.text || "";
+}
+
+function getCorrectQuizOptionText(question) {
+  if (Array.isArray(question.correctAnswer)) {
+    return question.correctAnswer
+      .map(function (id) {
+        return question.options.find(function (option) { return option.id === id; })?.text || "";
+      })
+      .filter(Boolean)
+      .join(" / ");
+  }
+  return question.options.find(function (option) { return option.id === question.correctAnswer; })?.text || "";
 }
 
 function applyQuestReward(progressByTopic, topicId, deltaExp, topicMeta) {

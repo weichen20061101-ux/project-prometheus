@@ -256,6 +256,68 @@ const DAILY_ENGLISH_LEVELS = [
   dailyEnglishSpec("日常英語 Lv9 自然輸出", "把句型、詞彙和反應速度接起來。"),
 ];
 
+const TOPIC_LEARNING_PROFILES = {
+  analyst: {
+    learnerStage: "beginner_unsteady",
+    targetOutcome: "研究公司財報與各項資料，建立基本面分析能力",
+    tone: "teacher_foundation",
+    resourceMode: ["notes", "official_links", "worked_example"],
+    resourceDepth: "detailed",
+    questionBlend: "mixed",
+    preferredQuizModes: ["single_choice", "multi_select", "boolean"],
+    visualStyles: ["exam_explainer_card", "realistic_context_image"],
+    visualPlacement: "above_question",
+    externalSourceTypes: ["company_official", "government_official", "major_news"],
+    preferredMultiSelectAnswers: 2,
+  },
+  english: {
+    learnerStage: "beginner_unsteady",
+    targetOutcome: "讀懂財經英文與年報句子",
+    tone: "teacher_foundation",
+    resourceMode: ["worked_example"],
+    resourceDepth: "medium",
+    questionBlend: "mixed",
+    preferredQuizModes: ["single_choice", "boolean"],
+    visualStyles: ["exam_explainer_card", "realistic_context_image"],
+    visualPlacement: "above_question",
+  },
+  dailyEnglish: {
+    learnerStage: "beginner_unsteady",
+    targetOutcome: "在日常場景自然開口和回應",
+    tone: "real_world_scenario",
+    resourceMode: ["notes"],
+    resourceDepth: "detailed",
+    questionBlend: "mixed",
+    preferredQuizModes: ["single_choice", "boolean", "short_response"],
+    visualStyles: ["exam_explainer_card", "realistic_context_image"],
+    visualPlacement: "above_question",
+  },
+  trading: {
+    learnerStage: "beginner_unsteady",
+    targetOutcome: "建立基本交易判斷與風控觀念",
+    tone: "real_world_scenario",
+    resourceMode: ["notes"],
+    resourceDepth: "medium",
+    questionBlend: "mixed",
+    preferredQuizModes: ["single_choice", "multi_select", "boolean"],
+    visualStyles: ["exam_explainer_card", "realistic_context_image"],
+    visualPlacement: "above_question",
+    preferredMultiSelectAnswers: 2,
+  },
+  growth: {
+    learnerStage: "beginner_unsteady",
+    targetOutcome: "建立穩定執行與不拖延的系統",
+    tone: "coach_follow_up",
+    resourceMode: ["notes"],
+    resourceDepth: "medium",
+    questionBlend: "mixed",
+    preferredQuizModes: ["single_choice", "multi_select", "boolean"],
+    visualStyles: ["exam_explainer_card", "realistic_context_image"],
+    visualPlacement: "above_question",
+    preferredMultiSelectAnswers: 2,
+  },
+};
+
 function levelSpec(title, skill, materialLead, subtopics) {
   return { title, skill, materialLead, subtopics };
 }
@@ -359,6 +421,10 @@ function buildQuestRubric(topic, levelSpecData, itemLabel, concepts) {
   });
 }
 
+function getTopicLearningProfile(topicId) {
+  return TOPIC_LEARNING_PROFILES[topicId] || null;
+}
+
 function noteResource(label, content) {
   return { type: "note", label, content };
 }
@@ -368,12 +434,104 @@ function choiceOption(id, text) {
 }
 
 function finalizeQuizItems(items, seedBase) {
-  return items.map(function (item, index) {
+  const expandedItems = ensurePreferredQuizLength(items, seedBase);
+  return expandedItems.map(function (item, index) {
     const shuffledOptions = [...item.options].sort(function (left, right) {
       return quizHash(seedBase + ":" + index + ":" + left.id) - quizHash(seedBase + ":" + index + ":" + right.id);
     });
     return { ...item, options: shuffledOptions };
   });
+}
+
+function ensurePreferredQuizLength(items, seedBase) {
+  if (items.length >= 5) {
+    return items;
+  }
+  const parts = String(seedBase || "").split(":");
+  const topicId = parts[0];
+  const levelIndex = Number(parts[1] || 0);
+  const itemLabel = parts.slice(2).join(":");
+  const nextItems = [...items];
+  while (nextItems.length < 5) {
+    nextItems.push(buildFallbackQuizItem(topicId, levelIndex, itemLabel, nextItems.length + 1));
+  }
+  return nextItems;
+}
+
+function buildFallbackQuizItem(topicId, levelIndex, itemLabel, questionNumber) {
+  if (topicId === "analyst") {
+    return {
+      id: "q" + questionNumber,
+      format: "multi_select",
+      prompt: itemLabel + " 這題最適合優先參考哪些來源？",
+      options: [
+        choiceOption("a", "公司法說會或投資人關係資料"),
+        choiceOption("b", "主管機關或正式統計資料"),
+        choiceOption("c", "大型新聞網站的產業報導"),
+        choiceOption("d", "沒有來源的短影音摘要"),
+      ],
+      correctAnswer: ["a", "b", "c"],
+      explanation: "分析基本面時，優先使用公司官方資料、正式部門資料與大型媒體報導，避免只看無來源的二手摘要。",
+    };
+  }
+  if (topicId === "english") {
+    return {
+      id: "q" + questionNumber,
+      format: "choice",
+      prompt: "讀到年報句子時，哪個順序最適合作為第一輪理解？",
+      options: [
+        choiceOption("a", "先抓主詞與動詞，再看轉折，最後補專有名詞"),
+        choiceOption("b", "先背整句，再猜意思"),
+        choiceOption("c", "先查每個字，再完全重翻"),
+        choiceOption("d", "先判斷股價漲跌"),
+      ],
+      correctAnswer: "a",
+      explanation: "英文主題先練句子骨架，再補細節，這樣比較能真正讀懂財經文本。",
+    };
+  }
+  if (topicId === "dailyEnglish") {
+    return {
+      id: "q" + questionNumber,
+      format: "choice",
+      prompt: "在「" + itemLabel + "」情境中，初學者最好的第一步是什麼？",
+      options: [
+        choiceOption("a", "先用一小句可直接開口的英文完成回應"),
+        choiceOption("b", "先寫一段正式作文"),
+        choiceOption("c", "先記十個艱深片語"),
+        choiceOption("d", "先不說，等完全準備好再開口"),
+      ],
+      correctAnswer: "a",
+      explanation: "日常英語先求能開口和能回應，再慢慢拉長句子與細節。",
+    };
+  }
+  if (topicId === "trading") {
+    return {
+      id: "q" + questionNumber,
+      format: "multi_select",
+      prompt: "面對交易情境時，哪些步驟應該在進場前先確認？",
+      options: [
+        choiceOption("a", "停損位置"),
+        choiceOption("b", "進場條件是否成立"),
+        choiceOption("c", "單筆風險是否在規則內"),
+        choiceOption("d", "先猜這筆一定會賺多少"),
+      ],
+      correctAnswer: ["a", "b", "c"],
+      explanation: "交易系統先確認規則、風險與條件，不靠情緒預測結果。",
+    };
+  }
+  return {
+    id: "q" + questionNumber,
+    format: "multi_select",
+    prompt: "要讓「" + itemLabel + "」真的落地，哪些做法通常比較有效？",
+    options: [
+      choiceOption("a", "把行動拆成可執行的小步驟"),
+      choiceOption("b", "設定固定觸發條件"),
+      choiceOption("c", "留下回顧與追蹤方式"),
+      choiceOption("d", "只靠臨時情緒撐下去"),
+    ],
+    correctAnswer: ["a", "b", "c"],
+    explanation: "個人成長題目重點在可執行、可追蹤、可回顧，而不是只靠意志力。",
+  };
 }
 
 function quizHash(value) {
@@ -772,6 +930,7 @@ function createGrowthQuizItems(itemLabel) {
 
 function buildBaseQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp) {
   const questId = topic.id + "-" + levelIndex + "-" + String(itemIndex + 1).padStart(2, "0");
+  const learningProfile = getTopicLearningProfile(topic.id);
   return {
     id: questId,
     topic: topic.id,
@@ -783,6 +942,21 @@ function buildBaseQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, 
     maxLevel: levelIndex,
     seconds,
     exp,
+    learningProfile,
+    visualAid: {
+      placement: learningProfile?.visualPlacement || "above_question",
+      styles: learningProfile?.visualStyles || [],
+      prompt:
+        topic.id === "analyst"
+          ? "題庫解析圖卡，展示 " + itemLabel + " 的財報/來源判讀重點"
+          : topic.id === "english"
+            ? "題庫解析圖卡，拆解 " + itemLabel + " 的英文句子結構與關鍵詞"
+            : topic.id === "dailyEnglish"
+              ? "真實情境插圖，呈現 " + itemLabel + " 的日常對話場景"
+              : topic.id === "trading"
+                ? "題庫解析圖卡，展示 " + itemLabel + " 的交易規則與情境判斷"
+                : "題庫解析圖卡，展示 " + itemLabel + " 的執行流程與反思重點",
+    },
   };
 }
 
