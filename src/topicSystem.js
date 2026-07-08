@@ -363,6 +363,391 @@ function noteResource(label, content) {
   return { type: "note", label, content };
 }
 
+function choiceOption(id, text) {
+  return { id, text };
+}
+
+function buildQuizGroupQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp, followUpOpenEnded) {
+  const base = buildBaseQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp);
+  const quizItems = createQuizItems(topic, levelIndex, itemLabel);
+  return {
+    ...base,
+    type: "quiz_group",
+    materialTitle: "題組導讀：" + itemLabel,
+    materials: [
+      levelSpecData.materialLead,
+      "這一題先不要長篇作答，先用題組確認基礎概念。",
+      "先完成判斷，再看系統回饋與解釋。",
+    ],
+    summary: [
+      "你現在在基礎階段，這題先用選擇題和是非題確認觀念。",
+      "目標不是硬背，而是先知道哪些判斷是對的、哪些直覺是錯的。",
+    ],
+    answerGuide: [
+      "先逐題作答，不要跳題。",
+      "遇到不確定時，先選你最有把握的判斷。",
+      "完成後看錯題解釋，再把概念補回去。",
+    ],
+    resources: [
+      noteResource("題組策略", "先做判斷題建立基本輪廓，再進到後面的開放題會更順。"),
+      noteResource("通過標準", "題組全部作答後，答對率達到門檻就算通過。"),
+    ],
+    followUpOpenEnded,
+    questions: quizItems,
+    clear: "請完成整組題目並提交驗收。",
+    hints: [
+      "先選你最直覺認為對的答案。",
+      "如果卡住，回頭看題組導讀和學習資源。",
+      "錯題的重點不是扣分，而是幫你抓出觀念缺口。",
+    ],
+  };
+}
+
+function createQuizItems(topic, levelIndex, itemLabel) {
+  if (topic.id === "analyst") {
+    return createAnalystQuizItems(levelIndex, itemLabel);
+  }
+  if (topic.id === "english") {
+    return createEnglishQuizItems(itemLabel);
+  }
+  if (topic.id === "dailyEnglish") {
+    return createDailyEnglishQuizItems(itemLabel);
+  }
+  if (topic.id === "trading") {
+    return createTradingQuizItems(itemLabel);
+  }
+  return createGrowthQuizItems(itemLabel);
+}
+
+function createAnalystQuizItems(levelIndex, itemLabel) {
+  if (levelIndex === 0) {
+    return [
+      {
+        id: "q1",
+        format: "choice",
+        prompt: "下列哪一個最接近「" + itemLabel + "」在財報中的意思？",
+        options: [
+          choiceOption("a", "公司控制的資源或未來可帶來價值的項目"),
+          choiceOption("b", "公司每月一定會付出的固定費用"),
+          choiceOption("c", "公司股價的短期漲跌"),
+          choiceOption("d", "公司高層的主觀判斷"),
+        ],
+        correctAnswer: "a",
+        explanation: itemLabel + " 在基礎會計裡，重點是先理解它代表公司掌握的資源，不是市場價格或情緒。",
+      },
+      {
+        id: "q2",
+        format: "boolean",
+        prompt: "是非題：資產增加時，負債和股東權益一定也要有對應變化。",
+        options: [choiceOption("true", "是"), choiceOption("false", "否")],
+        correctAnswer: "true",
+        explanation: "會計式一定要平衡，所以資產的變動一定會對應到負債、權益，或另一個資產項目的變化。",
+      },
+      {
+        id: "q3",
+        format: "choice",
+        prompt: "公司向銀行借 100 萬現金時，最可能發生什麼？",
+        options: [
+          choiceOption("a", "資產增加、負債增加"),
+          choiceOption("b", "資產減少、負債增加"),
+          choiceOption("c", "資產增加、股東權益增加"),
+          choiceOption("d", "只有現金增加，其他不變"),
+        ],
+        correctAnswer: "a",
+        explanation: "借款進來會讓現金增加，同時公司對銀行的債務也增加。",
+      },
+      {
+        id: "q4",
+        format: "boolean",
+        prompt: "是非題：存貨一定越高越好，因為代表公司東西很多。",
+        options: [choiceOption("true", "是"), choiceOption("false", "否")],
+        correctAnswer: "false",
+        explanation: "存貨高可能是備貨，也可能是賣不掉，所以不能單看高低判斷好壞。",
+      },
+    ];
+  }
+
+  if (levelIndex === 1) {
+    return [
+      {
+        id: "q1",
+        format: "choice",
+        prompt: "毛利率下降時，第一個該聯想到的是哪一類問題？",
+        options: [
+          choiceOption("a", "成本、售價或產品組合變化"),
+          choiceOption("b", "董事長換人"),
+          choiceOption("c", "公司網站改版"),
+          choiceOption("d", "現金一定增加"),
+        ],
+        correctAnswer: "a",
+        explanation: "毛利率主要反映營收扣掉直接成本後的結果，通常先看成本、售價與產品組合。",
+      },
+      {
+        id: "q2",
+        format: "boolean",
+        prompt: "是非題：營收成長，就一定代表公司獲利品質也變好。",
+        options: [choiceOption("true", "是"), choiceOption("false", "否")],
+        correctAnswer: "false",
+        explanation: "營收成長不等於獲利變好，還要一起看毛利率、費用率與現金流。",
+      },
+      {
+        id: "q3",
+        format: "choice",
+        prompt: "如果營收上升，但營業利益率下降，較合理的初步判讀是？",
+        options: [
+          choiceOption("a", "公司可能多賣了，但賺得不一定更有效率"),
+          choiceOption("b", "公司一定倒閉"),
+          choiceOption("c", "公司現金一定變多"),
+          choiceOption("d", "代表財報有錯"),
+        ],
+        correctAnswer: "a",
+        explanation: "營收和效率要分開看，營業利益率下降代表費用或成本壓力可能在增加。",
+      },
+      {
+        id: "q4",
+        format: "boolean",
+        prompt: "是非題：稅後淨利會受到業外項目影響。",
+        options: [choiceOption("true", "是"), choiceOption("false", "否")],
+        correctAnswer: "true",
+        explanation: "稅後淨利是最終結果，會受到營運內外各種收益與損失影響。",
+      },
+    ];
+  }
+
+  return [
+    {
+      id: "q1",
+      format: "choice",
+      prompt: "哪一項最能說明為什麼「獲利」和「現金」不能直接畫上等號？",
+      options: [
+        choiceOption("a", "因為應收帳款、存貨、折舊等都可能讓兩者不同步"),
+        choiceOption("b", "因為公司名稱會影響現金"),
+        choiceOption("c", "因為股價每天在變"),
+        choiceOption("d", "因為獲利和現金其實完全無關"),
+      ],
+      correctAnswer: "a",
+      explanation: "損益表採認列原則，現金流則看เงินจริง進出，所以常常不同步。",
+    },
+    {
+      id: "q2",
+      format: "boolean",
+      prompt: "是非題：營運現金流為負，代表公司一定是壞公司。",
+      options: [choiceOption("true", "是"), choiceOption("false", "否")],
+      correctAnswer: "false",
+      explanation: "要看原因，成長期擴張或短期營運變化都可能讓現金流轉弱。",
+    },
+    {
+      id: "q3",
+      format: "choice",
+      prompt: "如果應收帳款增加很多，但營收也在成長，第一個該注意的是？",
+      options: [
+        choiceOption("a", "公司收款是否變慢"),
+        choiceOption("b", "公司 logo 是否改版"),
+        choiceOption("c", "公司一定更安全"),
+        choiceOption("d", "代表現金一定變多"),
+      ],
+      correctAnswer: "a",
+      explanation: "應收帳款拉高常代表錢還沒真正收到，要留意現金回收品質。",
+    },
+    {
+      id: "q4",
+      format: "boolean",
+      prompt: "是非題：自由現金流通常比單看淨利更接近公司真實可運用的現金能力。",
+      options: [choiceOption("true", "是"), choiceOption("false", "否")],
+      correctAnswer: "true",
+      explanation: "自由現金流會把營運現金和資本支出都納入，比單看獲利更接近現金實況。",
+    },
+  ];
+}
+
+function createEnglishQuizItems(itemLabel) {
+  return [
+    {
+      id: "q1",
+      format: "choice",
+      prompt: "看到英文材料時，第一步最合理的是？",
+      options: [
+        choiceOption("a", "先抓主詞、主要動詞和轉折字"),
+        choiceOption("b", "先逐字查每一個單字"),
+        choiceOption("c", "先猜作者是誰"),
+        choiceOption("d", "先背整句"),
+      ],
+      correctAnswer: "a",
+      explanation: "先抓句子骨架，比逐字翻更容易看懂整體意思。",
+    },
+    {
+      id: "q2",
+      format: "boolean",
+      prompt: "是非題：although、but 這類字常常在提示保留條件或語氣轉折。",
+      options: [choiceOption("true", "是"), choiceOption("false", "否")],
+      correctAnswer: "true",
+      explanation: "這些字很常決定句子真正重點在哪裡。",
+    },
+    {
+      id: "q3",
+      format: "choice",
+      prompt: "「" + itemLabel + "」這種英文訓練，最主要在練哪個能力？",
+      options: [
+        choiceOption("a", "抓重點並用自己的話重述"),
+        choiceOption("b", "把每個字都翻成一模一樣"),
+        choiceOption("c", "只記單字不看整句"),
+        choiceOption("d", "猜公司股價"),
+      ],
+      correctAnswer: "a",
+      explanation: "財經英文重點是理解材料、抓語氣、轉成自己的研究語言。",
+    },
+    {
+      id: "q4",
+      format: "boolean",
+      prompt: "是非題：看英文材料時，能用中文白話重述，通常比逐字硬翻更能證明你真的懂。",
+      options: [choiceOption("true", "是"), choiceOption("false", "否")],
+      correctAnswer: "true",
+      explanation: "白話重述能驗證你有沒有抓到真正意思。",
+    },
+  ];
+}
+
+function createDailyEnglishQuizItems(itemLabel) {
+  return [
+    {
+      id: "q1",
+      format: "choice",
+      prompt: "在「" + itemLabel + "」情境裡，最好的第一步通常是？",
+      options: [
+        choiceOption("a", "先講出一個最短可用句"),
+        choiceOption("b", "先在心裡想很久再開口"),
+        choiceOption("c", "一定要一次講完整長句"),
+        choiceOption("d", "先背文法規則"),
+      ],
+      correctAnswer: "a",
+      explanation: "日常英語先求能開口，之後再慢慢延長句子。",
+    },
+    {
+      id: "q2",
+      format: "boolean",
+      prompt: "是非題：日常情境英語的目標是先能被聽懂，不是第一天就文法完美。",
+      options: [choiceOption("true", "是"), choiceOption("false", "否")],
+      correctAnswer: "true",
+      explanation: "先能表達需求，才有機會越講越自然。",
+    },
+    {
+      id: "q3",
+      format: "choice",
+      prompt: "如果你已經說完第一句，第二句最好的功能通常是？",
+      options: [
+        choiceOption("a", "補資訊，讓對方更懂你的需求"),
+        choiceOption("b", "重複第一句完全一樣的話"),
+        choiceOption("c", "直接沉默"),
+        choiceOption("d", "切回中文"),
+      ],
+      correctAnswer: "a",
+      explanation: "第二句的任務是讓對話能走下去，而不是再背一個新規則。",
+    },
+    {
+      id: "q4",
+      format: "boolean",
+      prompt: "是非題：日常英語每題都應該至少帶走一個可重複使用的句型。",
+      options: [choiceOption("true", "是"), choiceOption("false", "否")],
+      correctAnswer: "true",
+      explanation: "這樣你才會從單題練習累積成真正可用的語言庫。",
+    },
+  ];
+}
+
+function createTradingQuizItems(itemLabel) {
+  return [
+    {
+      id: "q1",
+      format: "choice",
+      prompt: "交易系統基礎題裡，面對「" + itemLabel + "」最好的思路是？",
+      options: [
+        choiceOption("a", "先看風險，再看報酬"),
+        choiceOption("b", "先看能不能快速賺最多"),
+        choiceOption("c", "先看別人怎麼喊單"),
+        choiceOption("d", "先衝進去再想"),
+      ],
+      correctAnswer: "a",
+      explanation: "交易系統的底層永遠先是風險控制。",
+    },
+    {
+      id: "q2",
+      format: "boolean",
+      prompt: "是非題：有沒有規則，比這筆單最後有沒有賺錢更重要。",
+      options: [choiceOption("true", "是"), choiceOption("false", "否")],
+      correctAnswer: "true",
+      explanation: "單筆盈虧會有運氣，規則才決定你能不能長期活下來。",
+    },
+    {
+      id: "q3",
+      format: "choice",
+      prompt: "如果一筆交易的最大風險你根本算不出來，較合理的做法是？",
+      options: [
+        choiceOption("a", "先不要做，或縮小到能控制的範圍"),
+        choiceOption("b", "加大部位測試"),
+        choiceOption("c", "追價進場"),
+        choiceOption("d", "忽略風險"),
+      ],
+      correctAnswer: "a",
+      explanation: "算不出風險，代表你還沒有真的準備好進場。",
+    },
+    {
+      id: "q4",
+      format: "boolean",
+      prompt: "是非題：連續幾筆賺錢，不代表你的交易紀律就一定穩。",
+      options: [choiceOption("true", "是"), choiceOption("false", "否")],
+      correctAnswer: "true",
+      explanation: "連勝可能來自運氣，紀律要看長期是否照規則執行。",
+    },
+  ];
+}
+
+function createGrowthQuizItems(itemLabel) {
+  return [
+    {
+      id: "q1",
+      format: "choice",
+      prompt: "在個人成長題裡，面對「" + itemLabel + "」最好的開始方式通常是？",
+      options: [
+        choiceOption("a", "先做一個最小可執行版本"),
+        choiceOption("b", "先把計畫想得超完整再說"),
+        choiceOption("c", "等狀態最好時再開始"),
+        choiceOption("d", "今天先不做"),
+      ],
+      correctAnswer: "a",
+      explanation: "能開始比看起來很完整更重要。",
+    },
+    {
+      id: "q2",
+      format: "boolean",
+      prompt: "是非題：想持續執行時，環境設計通常比單靠意志力更重要。",
+      options: [choiceOption("true", "是"), choiceOption("false", "否")],
+      correctAnswer: "true",
+      explanation: "環境和流程會大幅降低摩擦，讓行為更容易發生。",
+    },
+    {
+      id: "q3",
+      format: "choice",
+      prompt: "如果一個習慣總是做不起來，第一個要檢查的是？",
+      options: [
+        choiceOption("a", "門檻是不是設太高"),
+        choiceOption("b", "是不是自己完全沒救"),
+        choiceOption("c", "是不是要一次做更久"),
+        choiceOption("d", "是不是應該加更多規則"),
+      ],
+      correctAnswer: "a",
+      explanation: "很多失敗不是不夠努力，而是起手式太大。",
+    },
+    {
+      id: "q4",
+      format: "boolean",
+      prompt: "是非題：每週回顧的功能之一，就是找出你總是卡住的固定模式。",
+      options: [choiceOption("true", "是"), choiceOption("false", "否")],
+      correctAnswer: "true",
+      explanation: "回顧不是自責，而是找規律並修正系統。",
+    },
+  ];
+}
+
 function buildBaseQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp) {
   const questId = topic.id + "-" + levelIndex + "-" + String(itemIndex + 1).padStart(2, "0");
   return {
@@ -419,6 +804,12 @@ function buildAnalystConceptQuest(topic, levelIndex, levelSpecData, itemLabel, i
       "用借款、購貨、收款這種小情境最容易舉例。",
     ],
   };
+}
+
+function buildAnalystOpenEndedQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp) {
+  return levelIndex <= 2
+    ? buildAnalystConceptQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp)
+    : buildAnalystCaseQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp);
 }
 
 function buildAnalystCaseQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp) {
@@ -600,27 +991,30 @@ function buildGenericAppliedQuest(topic, levelIndex, levelSpecData, itemLabel, i
   };
 }
 
+function buildOpenEndedQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp) {
+  if (topic.id === "analyst") {
+    return buildAnalystOpenEndedQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp);
+  }
+  if (topic.id === "english") {
+    return buildEnglishMaterialQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp);
+  }
+  if (topic.id === "dailyEnglish") {
+    return buildDailyEnglishQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp);
+  }
+  return buildGenericAppliedQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp);
+}
+
 function buildStandardQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, totalPerLevel) {
   const lowMinutes = topic.id === "analyst" ? 16 : topic.id === "dailyEnglish" ? 6 : 8;
   const seconds = Math.round((lowMinutes + levelIndex + (itemIndex % 3) * 2) * 60);
   const expBase = topic.id === "analyst" ? 52 : topic.id === "dailyEnglish" ? 20 : 28;
   const exp = expBase + levelIndex * 6 + (itemIndex % 4) * 2;
+  const followUpOpenEnded = buildOpenEndedQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp);
 
-  if (topic.id === "analyst") {
-    return levelIndex <= 2
-      ? buildAnalystConceptQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp)
-      : buildAnalystCaseQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp);
+  if (levelIndex <= 2) {
+    return buildQuizGroupQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp, followUpOpenEnded);
   }
-
-  if (topic.id === "english") {
-    return buildEnglishMaterialQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp);
-  }
-
-  if (topic.id === "dailyEnglish") {
-    return buildDailyEnglishQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp);
-  }
-
-  return buildGenericAppliedQuest(topic, levelIndex, levelSpecData, itemLabel, itemIndex, seconds, exp);
+  return followUpOpenEnded;
 }
 
 function generateLevelPool(topic, levelSpecs, countPerLevel) {

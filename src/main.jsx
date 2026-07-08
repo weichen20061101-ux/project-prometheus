@@ -179,6 +179,23 @@ function App() {
     });
   }
 
+  function updateQuizAnswer(questId, questionId, value) {
+    setDailyState(function (current) {
+      const currentAnswer = current.answers[questId];
+      const nextQuizAnswer =
+        currentAnswer && typeof currentAnswer === "object" && !Array.isArray(currentAnswer)
+          ? { ...currentAnswer, [questionId]: value }
+          : { [questionId]: value };
+      return {
+        ...current,
+        answers: {
+          ...current.answers,
+          [questId]: nextQuizAnswer,
+        },
+      };
+    });
+  }
+
   function showHint() {
     if (!currentDailyState.focusQuestId) {
       return;
@@ -194,7 +211,7 @@ function App() {
   }
 
   function submitQuest(quest) {
-    const answer = (currentDailyState.answers[quest.id] || "").trim();
+    const answer = currentDailyState.answers[quest.id] || (quest.type === "quiz_group" ? {} : "");
     if (!currentDailyState.startedQuestIds.includes(quest.id) && learningSettings.timerMode !== "off") {
       setDailyState(function (current) {
         return {
@@ -476,6 +493,7 @@ function App() {
                       timerMode={learningSettings.timerMode}
                       onStart={startQuest}
                       onAnswer={updateAnswer}
+                      onQuizAnswer={updateQuizAnswer}
                       onSubmit={submitQuest}
                     />
                   ) : (
@@ -500,11 +518,12 @@ function App() {
                           secondsLeft={currentDailyState.timeLeft[quest.id] ?? 0}
                           answer={currentDailyState.answers[quest.id] || ""}
                           result={currentDailyState.results[quest.id]}
-                          timerMode={learningSettings.timerMode}
-                          onStart={startQuest}
-                          onAnswer={updateAnswer}
-                          onSubmit={submitQuest}
-                        />
+                            timerMode={learningSettings.timerMode}
+                            onStart={startQuest}
+                            onAnswer={updateAnswer}
+                            onQuizAnswer={updateQuizAnswer}
+                            onSubmit={submitQuest}
+                          />
                       );
                     })}
                   </div>
@@ -526,6 +545,7 @@ function App() {
                       timerMode={learningSettings.timerMode}
                       onStart={startQuest}
                       onAnswer={updateAnswer}
+                      onQuizAnswer={updateQuizAnswer}
                       onSubmit={submitQuest}
                     />
                   );
@@ -637,8 +657,12 @@ function App() {
 }
 
 function QuestCard(props) {
-  const { quest, kindLabel, done, started, secondsLeft, answer, result, timerMode, onStart, onAnswer, onSubmit } = props;
+  const { quest, kindLabel, done, started, secondsLeft, answer, result, timerMode, onStart, onAnswer, onQuizAnswer, onSubmit } = props;
   const expired = timerMode !== "off" && secondsLeft === 0 && started && !done;
+  const quizAnswer = answer && typeof answer === "object" && !Array.isArray(answer) ? answer : {};
+  const answeredCount = quest.type === "quiz_group"
+    ? quest.questions.filter(function (question) { return Boolean(quizAnswer[question.id]); }).length
+    : 0;
   return (
     <article className={"rounded-2xl border p-4 " + (done ? "border-emerald-400/30 bg-emerald-400/5" : "border-white/8 bg-[#0b1525]")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -747,37 +771,86 @@ function QuestCard(props) {
 
       {started || timerMode === "off" ? (
         <div className="mt-4">
-          <div className="rounded-xl border border-white/8 bg-[#09131f] p-3">
-            <p className="text-sm font-bold text-white">測驗題目</p>
-            <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-300">
-              {quest.questions.map(function (question) {
-                return (
-                  <li key={question} className="flex gap-2">
-                    <ChevronRight className="mt-1 shrink-0 text-slate-400" size={15} />
-                    {question}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-          <label className="mt-4 block text-sm font-bold text-white" htmlFor={quest.id}>
-            你的答案
-          </label>
-          <textarea
-            id={quest.id}
-            value={answer}
-            onChange={function (event) { onAnswer(quest.id, event.target.value); }}
-            rows={5}
-            className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-[#09131f] p-3 text-sm leading-6 text-white outline-none transition focus:border-cyan-400/40"
-            placeholder={quest.clear}
-          />
+          {quest.type === "quiz_group" ? (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-white/8 bg-[#09131f] p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-bold text-white">基礎題組</p>
+                  <span className="text-sm text-cyan-200">{answeredCount}/{quest.questions.length} 已作答</span>
+                </div>
+                <div className="mt-4 space-y-4">
+                  {quest.questions.map(function (question, index) {
+                    return (
+                      <div key={question.id} className="rounded-xl border border-white/8 bg-[#0b1525] p-4">
+                        <p className="text-sm font-bold text-white">第 {index + 1} 題</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-300">{question.prompt}</p>
+                        <div className="mt-3 space-y-2">
+                          {question.options.map(function (option) {
+                            const selected = quizAnswer[question.id] === option.id;
+                            return (
+                              <label
+                                key={option.id}
+                                className={
+                                  "flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-3 text-sm transition " +
+                                  (selected
+                                    ? "border-cyan-400/40 bg-cyan-400/10 text-white"
+                                    : "border-white/8 bg-[#09131f] text-slate-300 hover:border-cyan-400/20")
+                                }
+                              >
+                                <input
+                                  type="radio"
+                                  name={quest.id + "-" + question.id}
+                                  value={option.id}
+                                  checked={selected}
+                                  onChange={function () { onQuizAnswer(quest.id, question.id, option.id); }}
+                                  className="mt-1 h-4 w-4 accent-cyan-400"
+                                />
+                                <span>{option.text}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="rounded-xl border border-white/8 bg-[#09131f] p-3">
+                <p className="text-sm font-bold text-white">測驗題目</p>
+                <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-300">
+                  {quest.questions.map(function (question) {
+                    return (
+                      <li key={question} className="flex gap-2">
+                        <ChevronRight className="mt-1 shrink-0 text-slate-400" size={15} />
+                        {question}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+              <label className="mt-4 block text-sm font-bold text-white" htmlFor={quest.id}>
+                你的答案
+              </label>
+              <textarea
+                id={quest.id}
+                value={answer}
+                onChange={function (event) { onAnswer(quest.id, event.target.value); }}
+                rows={5}
+                className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-[#09131f] p-3 text-sm leading-6 text-white outline-none transition focus:border-cyan-400/40"
+                placeholder={quest.clear}
+              />
+            </>
+          )}
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-slate-400">完成條件：{quest.clear}</p>
             <button
               onClick={function () { onSubmit(quest); }}
               className={"inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-bold transition " + (done ? "bg-emerald-500 text-slate-950" : "bg-white text-slate-950 hover:bg-cyan-50")}
             >
-              <NotebookPen size={17} /> {done ? "再次補答" : "提交驗收"}
+              <NotebookPen size={17} /> {done ? "再次補答" : quest.type === "quiz_group" ? "提交題組" : "提交驗收"}
             </button>
           </div>
         </div>
@@ -802,6 +875,23 @@ function ReviewBadge(props) {
       {result.missingConcepts?.length ? <p className="mt-2">需要補強：{result.missingConcepts.join("、")}</p> : null}
       {result.followUpQuestion ? <p className="mt-2 font-bold">追問：{result.followUpQuestion}</p> : null}
       {result.coachMessage ? <p className="mt-2">教練建議：{result.coachMessage}</p> : null}
+      {typeof result.correctCount === "number" && typeof result.totalCount === "number" ? (
+        <p className="mt-2 font-bold">答對 {result.correctCount} / {result.totalCount}</p>
+      ) : null}
+      {Array.isArray(result.incorrectItems) && result.incorrectItems.length ? (
+        <div className="mt-3 space-y-3">
+          {result.incorrectItems.map(function (item) {
+            return (
+              <div key={item.id} className="rounded-lg border border-white/10 bg-black/10 p-3">
+                <p className="font-bold">{item.prompt}</p>
+                <p className="mt-1">你的答案：{item.selectedText || "未作答"}</p>
+                <p className="mt-1">正確答案：{item.correctText}</p>
+                <p className="mt-1">{item.explanation}</p>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
       <p className="mt-2 font-bold">本次獲得：{result.awardedExp} EXP</p>
     </div>
   );
@@ -1054,6 +1144,10 @@ function pickQuestSet(pool, options) {
 }
 
 function evaluateAnswer(answer, quest, settings) {
+  if (quest.type === "quiz_group") {
+    return evaluateQuizGroupAnswer(answer, quest);
+  }
+
   const plain = answer.replace(/\s+/g, " ").trim();
   const sentenceCount = plain.split(/[。！？!?]/).filter(Boolean).length;
   const thresholds = getThresholdPreset(settings, quest);
@@ -1125,6 +1219,105 @@ function evaluateAnswer(answer, quest, settings) {
     missingConcepts,
     followUpQuestion,
     coachMessage,
+  };
+}
+
+function evaluateQuizGroupAnswer(answer, quest) {
+  const quizAnswer = answer && typeof answer === "object" && !Array.isArray(answer) ? answer : {};
+  const questions = Array.isArray(quest.questions) ? quest.questions : [];
+  const unansweredItems = questions.filter(function (question) {
+    return !quizAnswer[question.id];
+  });
+
+  if (unansweredItems.length) {
+    return {
+      status: "fail",
+      label: "未完成題組",
+      awardedExp: 0,
+      message: "這組題目還沒全部作答完。請先把每一題都選完再提交。",
+      hitConcepts: [],
+      missingConcepts: unansweredItems.map(function (item) { return "第 " + (questions.indexOf(item) + 1) + " 題"; }),
+      followUpQuestion: "先補完所有空白題目。",
+      coachMessage: "基礎題組先求完整作答，再看對錯。",
+      correctCount: questions.length - unansweredItems.length,
+      totalCount: questions.length,
+      incorrectItems: [],
+    };
+  }
+
+  const incorrectItems = [];
+  let correctCount = 0;
+  questions.forEach(function (question) {
+    const selected = quizAnswer[question.id];
+    if (selected === question.correctAnswer) {
+      correctCount += 1;
+      return;
+    }
+    const selectedOption = question.options.find(function (option) { return option.id === selected; });
+    const correctOption = question.options.find(function (option) { return option.id === question.correctAnswer; });
+    incorrectItems.push({
+      id: question.id,
+      prompt: question.prompt,
+      selectedText: selectedOption?.text || "",
+      correctText: correctOption?.text || "",
+      explanation: question.explanation,
+    });
+  });
+
+  const totalCount = questions.length;
+  const accuracy = totalCount ? correctCount / totalCount : 0;
+  const masteryLabel = accuracy < 0.5 ? "基礎不穩" : accuracy < 0.8 ? "可進下一題" : "已掌握";
+  const reviewAfterPass =
+    accuracy >= 0.8
+      ? "這組基礎題掌握得不錯。你可以繼續下一題，之後再進問答題。"
+      : "這組題先過，但有幾個基礎觀念還不夠穩，建議先看錯題解釋。";
+
+  if (accuracy < 0.5) {
+    return {
+      status: "fail",
+      label: masteryLabel,
+      awardedExp: 0,
+      message: "這組基礎觀念還不穩。先看錯題解釋，再重新做一次會比較有效。",
+      hitConcepts: ["已完成整組作答"],
+      missingConcepts: incorrectItems.map(function (item) { return item.prompt; }),
+      followUpQuestion: "先把錯題的原因看懂，再重做一次。",
+      coachMessage: "現在不需要急著進問答題，先把基本判斷補穩。",
+      correctCount,
+      totalCount,
+      incorrectItems,
+    };
+  }
+
+  if (accuracy < 0.8) {
+    return {
+      status: "reinforce",
+      label: masteryLabel,
+      awardedExp: Math.round(quest.exp * 0.75),
+      message: "這組題大致有抓到，但還有幾個觀念不夠穩。先看錯題解釋，再繼續會比較扎實。",
+      reviewAfterPass,
+      hitConcepts: ["已建立基礎輪廓", "可繼續往下"],
+      missingConcepts: incorrectItems.map(function (item) { return item.prompt; }),
+      followUpQuestion: "哪一題你剛剛最不確定？先把那題看懂。",
+      coachMessage: "你已經不是完全沒概念了，接下來重點是把錯的直覺修正過來。",
+      correctCount,
+      totalCount,
+      incorrectItems,
+    };
+  }
+
+  return {
+    status: "pass",
+    label: masteryLabel,
+    awardedExp: quest.exp,
+    message: "這組基礎題已掌握。你已經能做出穩定判斷，可以往下一層題型前進。",
+    reviewAfterPass,
+    hitConcepts: ["基礎判斷穩定", "可進下一題"],
+    missingConcepts: [],
+    followUpQuestion: quest.followUpOpenEnded ? "接下來可以挑戰同主題的問答題，把辨識能力轉成輸出。" : "",
+    coachMessage: "先把這組的判斷邏輯記住，後面開放題會更好答。",
+    correctCount,
+    totalCount,
+    incorrectItems,
   };
 }
 
