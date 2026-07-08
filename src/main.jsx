@@ -132,7 +132,6 @@ function App() {
 
   const currentStory = topicMeta[activeStory] || topicMeta.analyst;
   const gateQuest = currentDailyState.gateQuestId ? questIndex[currentDailyState.gateQuestId] : null;
-  const gateCompleted = currentDailyState.completedQuestIds.includes(currentDailyState.gateQuestId);
   const totalEarnedExp = Object.values(currentDailyState.awardedExp).reduce(function (sum, value) {
     return sum + value;
   }, 0);
@@ -336,7 +335,7 @@ function App() {
     setActiveStory(nextId);
   }
 
-  const activeStatus = deriveTopicStatus(activeStory, normalizedProgress[activeStory], gateCompleted);
+  const activeStatus = deriveTopicStatus(normalizedProgress[activeStory]);
   const activeBoss = currentStory.bossQuestions || [];
   const activeProject = currentStory.projectSteps || [];
 
@@ -350,7 +349,7 @@ function App() {
             </p>
             <h1 className="mt-4 text-4xl font-black tracking-tight text-white md:text-6xl">知識攻略系統</h1>
             <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300 md:text-lg">
-              現在切到哪個主題，就只看那個主題的題目、進度與驗收。分析師首題仍然是每日解鎖入口。
+              現在切到哪個主題，就只看那個主題的題目、進度與驗收。分析師首題保留為今日推薦入口，不再限制其他主題。
             </p>
           </div>
           <div className="rounded-2xl border border-cyan-400/15 bg-[#0d2038] p-5 shadow-[0_0_0_1px_rgba(34,211,238,0.08),0_30px_80px_rgba(2,12,27,0.45)]">
@@ -379,7 +378,7 @@ function App() {
                 const story = topicMeta[topicId];
                 const progress = normalizedProgress[topicId];
                 const active = topicId === activeStory;
-                const status = deriveTopicStatus(topicId, progress, gateCompleted);
+                const status = deriveTopicStatus(progress);
                 return (
                   <button
                     key={topicId}
@@ -407,7 +406,7 @@ function App() {
               {topicOrder.map(function (topicId) {
                 const story = topicMeta[topicId];
                 const progress = normalizedProgress[topicId];
-                const locked = deriveTopicStatus(topicId, progress, gateCompleted) === "鎖定";
+                const locked = false;
                 return (
                   <div key={topicId} className="rounded-xl border border-white/8 bg-[#0b1525] p-3">
                     <div className="flex items-center justify-between gap-3">
@@ -463,7 +462,7 @@ function App() {
                 <section>
                   <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-lg font-black text-white">今日必修首題</h3>
-                    <span className="text-sm text-cyan-200">完成後才會解鎖其他主題</span>
+                    <span className="text-sm text-cyan-200">今日推薦入口，可直接略過改做其他主題</span>
                   </div>
                   {gateQuest ? (
                     <QuestCard
@@ -487,35 +486,31 @@ function App() {
                 <section>
                   <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-lg font-black text-white">分析師主題任務</h3>
-                    <span className="text-sm text-slate-400">{gateCompleted ? "依設定生成今日主題題目" : "先完成首題再開放練習題"}</span>
+                    <span className="text-sm text-slate-400">依設定生成今日主題題目</span>
                   </div>
-                  {gateCompleted ? (
-                    <div className="space-y-4">
-                      {activeTopicQuests.map(function (quest) {
-                        return (
-                          <QuestCard
-                            key={quest.id}
-                            quest={quest}
-                            kindLabel="Analyst Quest"
-                            done={currentDailyState.completedQuestIds.includes(quest.id)}
-                            started={currentDailyState.startedQuestIds.includes(quest.id)}
-                            secondsLeft={currentDailyState.timeLeft[quest.id] ?? 0}
-                            answer={currentDailyState.answers[quest.id] || ""}
-                            result={currentDailyState.results[quest.id]}
-                            timerMode={learningSettings.timerMode}
-                            onStart={startQuest}
-                            onAnswer={updateAnswer}
-                            onSubmit={submitQuest}
-                          />
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <FallbackCard title="分析師主題練習尚未解鎖" body="先完成今日分析師首題，系統才會開放當日分析師練習題與其他主題。" />
-                  )}
+                  <div className="space-y-4">
+                    {activeTopicQuests.map(function (quest) {
+                      return (
+                        <QuestCard
+                          key={quest.id}
+                          quest={quest}
+                          kindLabel="Analyst Quest"
+                          done={currentDailyState.completedQuestIds.includes(quest.id)}
+                          started={currentDailyState.startedQuestIds.includes(quest.id)}
+                          secondsLeft={currentDailyState.timeLeft[quest.id] ?? 0}
+                          answer={currentDailyState.answers[quest.id] || ""}
+                          result={currentDailyState.results[quest.id]}
+                          timerMode={learningSettings.timerMode}
+                          onStart={startQuest}
+                          onAnswer={updateAnswer}
+                          onSubmit={submitQuest}
+                        />
+                      );
+                    })}
+                  </div>
                 </section>
               </div>
-            ) : gateCompleted ? (
+            ) : (
               <div className="space-y-4">
                 {activeTopicQuests.map(function (quest) {
                   return (
@@ -536,11 +531,6 @@ function App() {
                   );
                 })}
               </div>
-            ) : (
-              <FallbackCard
-                title={currentStory.title + " 目前鎖定"}
-                body="先完成今日分析師首題，這個主題才會顯示對應題目。切換主題只會顯示該主題自己的任務。"
-              />
             )}
           </Panel>
 
@@ -839,7 +829,7 @@ function loadInitialState() {
       results: {},
       hintLevel: 0,
       focusQuestId: null,
-      reviewMessage: "先完成今日分析師首題，再展開其他主題。",
+      reviewMessage: "今天可直接從任何主題開始。分析師首題保留為推薦入口。",
       bossHp: BOSS_START_HP,
     },
   };
@@ -950,7 +940,7 @@ function createDailyState(progressByTopic, dateKey, questPools, topicOrder, sett
     results: {},
     hintLevel: 0,
     focusQuestId: analystGate ? analystGate.id : topicQuestIds.analyst?.[0] || null,
-    reviewMessage: "今天先完成分析師之路的首題。完成後，切到其他主題就只會看到該主題自己的任務。",
+    reviewMessage: "今天可直接從任何主題開始。切到哪個主題，就只會看到該主題自己的任務。",
     bossHp: BOSS_START_HP,
   };
 }
@@ -1098,10 +1088,7 @@ function applyQuestReward(progressByTopic, topic, awardedExp, topicMeta) {
   };
 }
 
-function deriveTopicStatus(topicId, progress, gateCompleted) {
-  if (topicId !== "analyst" && !gateCompleted && progress.level === 0 && progress.exp === 0) {
-    return "鎖定";
-  }
+function deriveTopicStatus(progress) {
   if (progress.level === 0 && progress.exp === 0) {
     return "暖身";
   }
