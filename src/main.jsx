@@ -1119,22 +1119,6 @@ function QuestListItem(props) {
         </div>
       </div>
 
-      {Array.isArray(quest.summary) && quest.summary.length ? (
-        <div className="mt-4 rounded-2xl border border-white/8 bg-[#09131f] p-4">
-          <p className="text-sm font-bold text-white">你會先學到</p>
-          <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300">
-            {quest.summary.slice(0, 2).map(function (item) {
-              return (
-                <li key={item} className="flex gap-2">
-                  <ChevronRight className="mt-1 shrink-0 text-slate-400" size={15} />
-                  {item}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ) : null}
-
       {Array.isArray(quest.resources) && quest.resources.length ? (
         <div className="mt-4 rounded-2xl border border-cyan-400/10 bg-cyan-400/5 p-4">
           <div className="flex items-center justify-between gap-3">
@@ -1163,6 +1147,22 @@ function QuestListItem(props) {
               );
             })}
           </div>
+        </div>
+      ) : null}
+
+      {Array.isArray(quest.summary) && quest.summary.length ? (
+        <div className="mt-4 rounded-2xl border border-white/8 bg-[#09131f] p-4">
+          <p className="text-sm font-bold text-white">你會先學到</p>
+          <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300">
+            {quest.summary.slice(0, 2).map(function (item) {
+              return (
+                <li key={item} className="flex gap-2">
+                  <ChevronRight className="mt-1 shrink-0 text-slate-400" size={15} />
+                  {item}
+                </li>
+              );
+            })}
+          </ul>
         </div>
       ) : null}
 
