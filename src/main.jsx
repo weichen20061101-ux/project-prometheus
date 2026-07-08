@@ -700,6 +700,8 @@ function TopicPage(props) {
   const startedCount = quests.filter(function (quest) {
     return dailyState.startedQuestIds.includes(quest.id);
   }).length;
+  const primaryQuest = quests[0] || null;
+  const primaryResources = Array.isArray(primaryQuest?.resources) ? primaryQuest.resources.slice(0, 2) : [];
   return (
     <div className="mx-auto max-w-6xl px-5 py-8 md:px-8">
       <button
@@ -743,6 +745,41 @@ function TopicPage(props) {
         <MetricCard label="已開始" value={String(startedCount)} hint="中途離開也可以回來續答" />
         <MetricCard label="已完成" value={String(completedCount)} hint="完成後會發放這個主題的 EXP" />
       </section>
+
+      {primaryQuest && primaryResources.length ? (
+        <section className="mt-6 rounded-3xl border border-cyan-400/10 bg-cyan-400/5 p-5 md:p-6">
+          <div className="mb-4 flex items-center gap-3">
+            <BookOpen className="text-cyan-300" size={18} />
+            <div>
+              <p className="text-xs uppercase tracking-[0.18em] text-cyan-300">Study First</p>
+              <h3 className="text-lg font-black text-white">今日學習資料</h3>
+            </div>
+          </div>
+          <p className="text-sm leading-6 text-slate-300">{primaryQuest.title}</p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {primaryResources.map(function (resource) {
+              const key = resource.label + "-" + (resource.content || resource.url || "");
+              return (
+                <div key={key} className="rounded-2xl border border-white/8 bg-[#09131f] p-4">
+                  <p className="text-sm font-bold text-cyan-200">{resource.label}</p>
+                  {resource.type === "link" ? (
+                    <a
+                      href={resource.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 inline-flex text-sm text-cyan-300 underline underline-offset-4"
+                    >
+                      開啟連結
+                    </a>
+                  ) : (
+                    <p className="mt-2 text-sm leading-6 text-slate-300">{resource.content}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       <section className="mt-6 rounded-3xl border border-white/8 bg-[#08111d] p-5 md:p-6">
         <div className="mb-4 flex items-center gap-3">
@@ -837,7 +874,9 @@ function ExamPage(props) {
           <div className="rounded-3xl border border-white/8 bg-[#08111d] p-5">
             <div className="mb-5 rounded-2xl border border-cyan-400/15 bg-cyan-400/5 p-4">
               <div>
-                <p className="text-sm font-bold text-cyan-200">{focusedQuest.materialTitle}</p>
+                <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Study Guide</p>
+                <h2 className="mt-1 text-base font-black text-white">學習資料</h2>
+                <p className="mt-2 text-sm font-bold text-cyan-200">{focusedQuest.materialTitle}</p>
                 <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-200">
                   {focusedQuest.materials.slice(0, 3).map(function (item) {
                     return (
@@ -855,8 +894,8 @@ function ExamPage(props) {
               <div className="mb-5 rounded-2xl border border-white/8 bg-[#0b1525] p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Resources</p>
-                    <h2 className="mt-1 text-base font-black text-white">作答前可參考</h2>
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Reference</p>
+                    <h3 className="mt-1 text-base font-black text-white">補充資料</h3>
                   </div>
                   <button
                     onClick={onHint}
