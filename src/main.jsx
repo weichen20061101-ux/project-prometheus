@@ -42,6 +42,7 @@ function App() {
   const [learningSettings, setLearningSettings] = useState(initialState.learningSettings);
   const [activeStory, setActiveStory] = useState(initialState.activeStory);
   const [pageView, setPageView] = useState(initialState.pageView);
+  const [examTab, setExamTab] = useState(initialState.examTab);
   const [progressByTopic, setProgressByTopic] = useState(initialState.progressByTopic);
   const [dailyState, setDailyState] = useState(initialState.dailyState);
   const [topicDraft, setTopicDraft] = useState({
@@ -114,13 +115,14 @@ function App() {
       saveAppState({
         activeStory: topicMeta[activeStory] ? activeStory : "analyst",
         pageView,
+        examTab,
         customTopics: normalizedCustomTopics,
         learningSettings,
         progressByTopic: normalizedProgress,
         dailyState: currentDailyState,
       });
     },
-    [activeStory, pageView, normalizedCustomTopics, learningSettings, normalizedProgress, currentDailyState, topicMeta],
+    [activeStory, pageView, examTab, normalizedCustomTopics, learningSettings, normalizedProgress, currentDailyState, topicMeta],
   );
 
   const questIndex = useMemo(function () {
@@ -135,6 +137,7 @@ function App() {
 
   const currentStory = topicMeta[activeStory] || topicMeta.analyst;
   const gateQuest = currentDailyState.gateQuestId ? questIndex[currentDailyState.gateQuestId] : null;
+  const focusedQuest = currentDailyState.focusQuestId ? questIndex[currentDailyState.focusQuestId] : null;
   const totalEarnedExp = Object.values(currentDailyState.awardedExp).reduce(function (sum, value) {
     return sum + value;
   }, 0);
@@ -143,8 +146,15 @@ function App() {
     return questIndex[questId];
   }).filter(Boolean);
   const visibleHints = currentDailyState.focusQuestId ? questIndex[currentDailyState.focusQuestId]?.hints || [] : [];
+  const isExamMode = Boolean(
+    pageView === "topic" &&
+    focusedQuest &&
+    currentDailyState.startedQuestIds.includes(focusedQuest.id) &&
+    !currentDailyState.completedQuestIds.includes(focusedQuest.id),
+  );
 
   function startQuest(quest) {
+    setExamTab("quiz");
     setDailyState(function (current) {
       const startedQuestIds = current.startedQuestIds.includes(quest.id)
         ? current.startedQuestIds
@@ -361,9 +371,161 @@ function App() {
     setPageView("topic");
   }
 
+  function exitExamMode() {
+    setExamTab("guide");
+    setDailyState(function (current) {
+      return {
+        ...current,
+        focusQuestId: null,
+      };
+    });
+  }
+
   const activeStatus = deriveTopicStatus(normalizedProgress[activeStory]);
   const activeBoss = currentStory.bossQuestions || [];
   const activeProject = currentStory.projectSteps || [];
+
+  if (isExamMode && focusedQuest) {
+    return (
+      <main className="min-h-screen bg-[#07111f] text-slate-100">
+        <section className="border-b border-white/8 bg-[#08111d]">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-4 md:px-8">
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Exam Mode</p>
+              <h1 className="mt-1 text-xl font-black text-white">{focusedQuest.title}</h1>
+              <p className="mt-1 text-sm text-slate-400">{currentStory.title} / {focusedQuest.track}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="inline-flex items-center gap-2 rounded-xl border border-white/8 bg-[#0b1525] px-4 py-2 text-sm font-bold text-slate-300">
+                <Timer size={16} />
+                {learningSettings.timerMode === "off" ? "自由作答" : formatTime(currentDailyState.timeLeft[focusedQuest.id] ?? 0)}
+              </div>
+              <button
+                onClick={exitExamMode}
+                className="inline-flex items-center gap-2 rounded-xl border border-white/8 bg-[#0b1525] px-4 py-2 text-sm font-bold text-slate-200 transition hover:border-cyan-400/30 hover:text-white"
+              >
+                <ArrowLeft size={16} /> 離開測驗
+              </button>
+            </div>
+          </div>
+          <div className="mx-auto flex max-w-6xl flex-wrap gap-2 px-5 pb-4 md:px-8">
+            {[
+              { id: "guide", label: "導讀" },
+              { id: "resources", label: "資源" },
+              { id: "quiz", label: "題目" },
+              { id: "hint", label: "提示" },
+              { id: "review", label: "解析" },
+            ].map(function (tab) {
+              const disabled = tab.id === "review" ? !currentDailyState.results[focusedQuest.id] : false;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={function () { if (!disabled) { setExamTab(tab.id); } }}
+                  disabled={disabled}
+                  className={
+                    "rounded-full border px-4 py-2 text-sm font-bold transition " +
+                    (examTab === tab.id
+                      ? "border-cyan-400/40 bg-cyan-400/10 text-white"
+                      : "border-white/8 bg-[#0b1525] text-slate-400 hover:border-cyan-400/20 hover:text-slate-200") +
+                    (disabled ? " cursor-not-allowed opacity-40" : "")
+                  }
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-4xl px-5 py-8 md:px-8">
+          <div className="rounded-3xl border border-white/8 bg-[#08111d] p-6 shadow-[0_20px_60px_rgba(2,12,27,0.35)]">
+            {examTab === "guide" ? (
+              <div className="space-y-5">
+                <Block title={focusedQuest.materialTitle} items={focusedQuest.materials} tone="cyan" />
+                <Block title="快速導讀" items={focusedQuest.summary} />
+                <Block title="作答方向" items={focusedQuest.answerGuide} />
+                <div className="pt-2">
+                  <button
+                    onClick={function () { setExamTab("quiz"); }}
+                    className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-4 py-2 font-bold text-slate-950 transition hover:bg-cyan-300"
+                  >
+                    <Play size={16} /> 進入題目
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {examTab === "resources" ? (
+              <div className="space-y-4">
+                <h2 className="text-lg font-black text-white">學習資源</h2>
+                {Array.isArray(focusedQuest.resources) && focusedQuest.resources.length ? (
+                  focusedQuest.resources.map(function (resource) {
+                    const key = resource.label + "-" + (resource.content || resource.url || "");
+                    return (
+                      <div key={key} className="rounded-xl border border-white/8 bg-[#0b1525] p-4">
+                        <p className="text-sm font-bold text-cyan-200">{resource.label}</p>
+                        {resource.type === "link" ? (
+                          <a href={resource.url} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-sm text-cyan-300 underline underline-offset-4">
+                            開啟參考連結
+                          </a>
+                        ) : (
+                          <p className="mt-2 text-sm leading-6 text-slate-300">{resource.content}</p>
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-sm text-slate-400">這題目前沒有額外資源。</p>
+                )}
+              </div>
+            ) : null}
+
+            {examTab === "quiz" ? (
+              <ExamQuestionSection
+                quest={focusedQuest}
+                answer={currentDailyState.answers[focusedQuest.id] || ""}
+                timerMode={learningSettings.timerMode}
+                onAnswer={updateAnswer}
+                onQuizAnswer={updateQuizAnswer}
+                onSubmit={submitQuest}
+              />
+            ) : null}
+
+            {examTab === "hint" ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-lg font-black text-white">提示</h2>
+                  <button
+                    onClick={showHint}
+                    className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-4 py-2 font-bold text-slate-950 transition hover:bg-cyan-300"
+                  >
+                    <Lightbulb size={16} /> 顯示下一則提示
+                  </button>
+                </div>
+                {currentDailyState.hintLevel > 0 ? (
+                  <div className="space-y-3">
+                    {visibleHints.slice(0, currentDailyState.hintLevel).map(function (hint) {
+                      return <p key={hint} className="rounded-xl border border-cyan-400/10 bg-cyan-400/5 p-4 text-sm leading-6 text-slate-200">{hint}</p>;
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400">還沒有展開提示。需要時再點開。</p>
+                )}
+              </div>
+            ) : null}
+
+            {examTab === "review" ? (
+              currentDailyState.results[focusedQuest.id] ? (
+                <ReviewBadge result={currentDailyState.results[focusedQuest.id]} />
+              ) : (
+                <p className="text-sm text-slate-400">先提交這題，才會有解析。</p>
+              )
+            ) : null}
+          </div>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#07111f] text-slate-100">
@@ -929,6 +1091,120 @@ function QuestCard(props) {
   );
 }
 
+function ExamQuestionSection(props) {
+  const { quest, answer, timerMode, onAnswer, onQuizAnswer, onSubmit } = props;
+  const quizAnswer = answer && typeof answer === "object" && !Array.isArray(answer) ? answer : {};
+  const answeredCount = quest.type === "quiz_group"
+    ? quest.questions.filter(function (question) { return Boolean(quizAnswer[question.id]); }).length
+    : 0;
+
+  return (
+    <div className="space-y-4">
+      {quest.type === "quiz_group" ? (
+        <>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-black text-white">題組測驗</h2>
+            <span className="text-sm text-cyan-200">{answeredCount}/{quest.questions.length} 已作答</span>
+          </div>
+          {quest.questions.map(function (question, index) {
+            return (
+              <div key={question.id} className="rounded-2xl border border-white/8 bg-[#0b1525] p-5">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Question {index + 1}</p>
+                <p className="mt-2 text-base leading-7 text-white">{question.prompt}</p>
+                <div className="mt-4 space-y-3">
+                  {question.options.map(function (option) {
+                    const selected = quizAnswer[question.id] === option.id;
+                    return (
+                      <label
+                        key={option.id}
+                        className={
+                          "flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-4 text-sm transition " +
+                          (selected
+                            ? "border-cyan-400/40 bg-cyan-400/10 text-white"
+                            : "border-white/8 bg-[#09131f] text-slate-300 hover:border-cyan-400/20")
+                        }
+                      >
+                        <input
+                          type="radio"
+                          name={quest.id + "-" + question.id}
+                          value={option.id}
+                          checked={selected}
+                          onChange={function () { onQuizAnswer(quest.id, question.id, option.id); }}
+                          className="mt-1 h-4 w-4 accent-cyan-400"
+                        />
+                        <span className="leading-6">{option.text}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </>
+      ) : (
+        <>
+          <div className="rounded-2xl border border-white/8 bg-[#0b1525] p-5">
+            <h2 className="text-lg font-black text-white">問答題目</h2>
+            <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
+              {quest.questions.map(function (question) {
+                return (
+                  <li key={question} className="flex gap-2">
+                    <ChevronRight className="mt-1 shrink-0 text-slate-400" size={15} />
+                    {question}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-white" htmlFor={quest.id}>
+              你的答案
+            </label>
+            <textarea
+              id={quest.id}
+              value={answer}
+              onChange={function (event) { onAnswer(quest.id, event.target.value); }}
+              rows={8}
+              className="mt-3 w-full resize-none rounded-2xl border border-white/10 bg-[#0b1525] p-4 text-sm leading-6 text-white outline-none transition focus:border-cyan-400/40"
+              placeholder={quest.clear}
+            />
+          </div>
+        </>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/8 pt-4">
+        <p className="text-sm text-slate-400">完成條件：{quest.clear}</p>
+        <button
+          onClick={function () { onSubmit(quest); }}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2 font-bold text-slate-950 transition hover:bg-cyan-50"
+        >
+          <NotebookPen size={17} /> {quest.type === "quiz_group" ? "提交題組" : "提交驗收"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Block(props) {
+  const { title, items, tone } = props;
+  const toneClass = tone === "cyan" ? "text-cyan-200" : "text-white";
+  return (
+    <div className="rounded-2xl border border-white/8 bg-[#0b1525] p-5">
+      <h2 className={"text-lg font-black " + toneClass}>{title}</h2>
+      <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
+        {(items || []).map(function (item) {
+          return (
+            <li key={item} className="flex gap-2">
+              <ChevronRight className="mt-1 shrink-0 text-slate-400" size={15} />
+              {item}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function ReviewBadge(props) {
   const { result } = props;
   const palette =
@@ -1035,6 +1311,8 @@ function loadInitialState() {
   const stored = readStoredState();
   return {
     activeStory: stored?.activeStory || "analyst",
+    pageView: stored?.pageView || "overview",
+    examTab: stored?.examTab || "guide",
     customTopics: Array.isArray(stored?.customTopics) ? stored.customTopics : [],
     learningSettings: { ...DEFAULT_SETTINGS, ...(stored?.learningSettings || {}) },
     progressByTopic: stored?.progressByTopic || {},
