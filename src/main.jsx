@@ -1135,6 +1135,37 @@ function QuestListItem(props) {
         </div>
       ) : null}
 
+      {Array.isArray(quest.resources) && quest.resources.length ? (
+        <div className="mt-4 rounded-2xl border border-cyan-400/10 bg-cyan-400/5 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-bold text-cyan-200">學習資料</p>
+            <span className="text-xs text-cyan-100/70">開始前先看</span>
+          </div>
+          <div className="mt-3 space-y-3">
+            {quest.resources.slice(0, 2).map(function (resource) {
+              const key = resource.label + "-" + (resource.content || resource.url || "");
+              return (
+                <div key={key} className="rounded-xl border border-white/8 bg-[#09131f] p-3">
+                  <p className="text-sm font-bold text-white">{resource.label}</p>
+                  {resource.type === "link" ? (
+                    <a
+                      href={resource.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 inline-flex text-sm text-cyan-300 underline underline-offset-4"
+                    >
+                      開啟連結
+                    </a>
+                  ) : (
+                    <p className="mt-2 text-sm leading-6 text-slate-300">{resource.content}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-slate-400">
           {completed ? "已完成" : started ? "已開始，可繼續作答" : "尚未開始"}
